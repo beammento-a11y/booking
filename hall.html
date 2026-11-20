@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="icon" type="image/png" href="icon.png"/><link rel="apple-touch-icon" href="icon.png"/>
+<title>Mentor Hall – MentoBeam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="theme.css"/><link rel="stylesheet" href="site.css"/><link rel="stylesheet" href="rent.css"/>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
+<script src="common.js"></script><script src="rent-data.js"></script>
+</head>
+<body>
+<div class="page">
+  <header class="nav"><div class="nav-in">
+    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></a>
+    <nav class="nav-links"><a href="index.html">Home</a><a href="#pk">Packages</a><a href="#book">Book</a><a href="#my">My bookings</a></nav>
+    <a class="btn btn-primary btn-sm" href="#book">Book now</a>
+  </div></header>
+  <main id="app"><div class="empty"><div class="spin dark"></div></div></main>
+  <footer><div style="margin-bottom:8px"><span id="footLogo"></span></div><div style="opacity:.7">© <span id="yr"></span> MentoBeam. All rights reserved.</div></footer>
+</div>
+<script>window.SPACE_ID='hall';</script>
+<script src="rent.js"></script>
+</body></html>

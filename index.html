@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="icon" type="image/png" href="icon.png"/><link rel="apple-touch-icon" href="icon.png"/>
+<title>MentoBeam – Exams, Venue Hire & Training Spaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="theme.css"/><link rel="stylesheet" href="site.css"/><link rel="stylesheet" href="rent.css"/>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
+<script src="common.js"></script><script src="rent-data.js"></script>
+</head>
+<body>
+<div class="page">
+  <header class="nav"><div class="nav-in">
+    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></a>
+    <nav class="nav-links"><a href="#book">Book</a><a href="#terms">Booking terms</a><a href="#contact">Contact</a></nav>
+    <a class="btn btn-primary btn-sm" href="exam.html">Register for Sim Exam</a>
+  </div></header>
+
+  <section class="hero" id="home">
+    <h1>Welcome to <span>MentoBeam</span></h1>
+    <p class="lead" id="intro">Skills & Innovation Center, Navinna, Maharagama.</p>
+  </section>
+
+  <div class="rn-wrap"><section class="rn-sec" id="book">
+    <h2>What would you like to book?</h2><p class="muted" style="margin-bottom:16px">Tap a card to see packages and rates.</p>
+    <div class="rn-grid" id="cards"><div class="empty" style="grid-column:1/-1"><div class="spin dark"></div></div></div>
+  </section>
+
+  <section class="rn-sec" id="terms"><div class="rn-terms"><h2>Booking terms</h2><ul id="termList"></ul>
+    <h3 style="margin-top:18px;font-size:15px">Included with every booking</h3><div class="rn-chips" id="incl"></div></div></section>
+
+  <section class="rn-sec" id="contact"><div class="rn-contact"><div><small style="opacity:.7;letter-spacing:.1em">WHATSAPP</small><br><b id="cWa"></b><div id="cMail" style="font-size:13px;margin-top:4px"></div></div>
+    <div style="text-align:right;font-size:14px"><b style="font-size:15px;color:#ff8a98" id="cAddr"></b><div id="cHours" style="opacity:.85"></div></div></div></section></div>
+
+  <footer><div style="margin-bottom:8px"><span id="footLogo"></span></div><div style="opacity:.7">© <span id="yr"></span> MentoBeam. All rights reserved.</div></footer>
+</div>
+<script>
+injectDeco();
+$('#navLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>'; $('#footLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>';
+$('#yr').textContent = new Date().getFullYear();
+let R = null;
+const photoOf = s => (s.photos && s.photos[0]) || '';
+function card(s) {
+  const off = !s.available;
+  return `<button class="rn-card ${off ? 'off' : ''}" data-id="${s.id}">
+    <div class="rn-img" style="${photoOf(s) ? `background-image:url('${esc(photoOf(s))}')` : ''}">${photoOf(s) ? '' : s.icon}<span class="rn-tag">${off ? '<span class="badge b-gray">Not available</span>' : '<span class="badge b-ok">Available</span>'}</span><span class="rn-hov">View packages →</span></div>
+    <div class="rn-bd"><h3>${esc(s.name)}</h3><p>${esc(s.tagline || '')}</p><div class="rn-from">${esc(fromPrice(s))}</div></div></button>`;
+}
+function render() {
+  const rt = R.rental;
+  $('#intro').textContent = rt.intro || '';
+  const exam = `<a class="rn-card" href="exam.html" style="text-decoration:none"><div class="rn-img" style="font-size:60px">🎓<span class="rn-tag"><span class="badge b-ok">Open</span></span><span class="rn-hov">Book a seat →</span></div>
+    <div class="rn-bd"><h3>PTE Simulation Exam</h3><p>Practise in real exam conditions with Yes For PTE.</p><div class="rn-from">Pick a date & time slot</div></div></a>`;
+  $('#cards').innerHTML = exam + R.spaces.map(card).join('');
+  $$('#cards button.rn-card').forEach(b => b.onclick = () => openSpace(b.dataset.id));
+  $('#termList').innerHTML = (rt.terms || []).map(t => `<li><span>${esc(t)}</span></li>`).join('');
+  $('#incl').innerHTML = (rt.included || []).map(t => `<span class="rn-chip">${esc(t)}</span>`).join('');
+  $('#cWa').textContent = rt.whatsapp || ''; $('#cMail').innerHTML = esc(rt.email || '') + (rt.web ? ' | ' + esc(rt.web) : '');
+  $('#cAddr').textContent = rt.address || ''; $('#cHours').textContent = rt.hours || '';
+}
+function openSpace(id) {
+  const s = R.spaces.find(x => x.id === id); if (!s) return;
+  const pk = s.packages.map(p => `<div class="${p.badge ? 'best' : ''}">${p.badge ? `<span class="bd">${esc(p.badge)}</span>` : ''}<b>${esc(p.name)}</b><b class="pr">${esc(pkgPrice(p))}</b><small>${esc(p.unit || '')}</small><small>${esc(p.note || '')}</small></div>`).join('');
+  const ex = s.extras.length ? `<h3 style="font-size:14px;margin-top:14px">Extras</h3><table class="rn-ex"><tbody>${s.extras.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(exLabel(x))}</td></tr>`).join('')}</tbody></table>` : '';
+  const m = modal(`<div class="rn-pop">${photoOf(s) ? `<img class="rn-ph" src="${esc(photoOf(s))}" alt=""/>` : ''}
+    <h2>${esc(s.name)} ${s.available ? '<span class="badge b-ok">Available</span>' : '<span class="badge b-gray">Not available</span>'}</h2><div class="rn-sub">${esc(s.tagline || '')}</div>
+    <p style="font-size:14px">${esc(s.idealFor ? 'Ideal for: ' + s.idealFor : '')}</p>
+    <h3 style="font-size:14px;margin-top:14px">Packages & rates</h3><div class="rn-pk">${pk}</div>${ex}
+    ${s.available ? `<a class="btn btn-primary btn-block btn-lg" style="margin-top:16px" href="${s.id}.html">Book ${esc(s.name)}</a>`
+      : `<div class="rn-closed">Bookings for this space are not open right now. You can still view the packages. Contact us on WhatsApp <b>${esc(R.rental.whatsapp || '')}</b> to ask about availability.</div>`}
+    </div>`, { wide: false });
+}
+(async () => { R = await loadRentals(); render(); })();
+</script>
+</body></html>

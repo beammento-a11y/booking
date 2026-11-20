@@ -1,0 +1,16 @@
+# Dependencies & env
+node_modules/
+.env
+.env.*
+
+# Firebase Admin / service account keys (NEVER commit)
+*serviceAccount*.json
+*firebase-adminsdk*.json
+firebase-debug.log
+.firebase/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
