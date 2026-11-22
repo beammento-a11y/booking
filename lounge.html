@@ -5,20 +5,22 @@
 <link rel="icon" type="image/png" href="icon.png"/><link rel="apple-touch-icon" href="icon.png"/>
 <title>Lounge and Pantry – MentoBeam</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="theme.css"/><link rel="stylesheet" href="site.css"/><link rel="stylesheet" href="rent.css"/>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 <script src="common.js"></script><script src="rent-data.js"></script>
+<link rel="stylesheet" href="theme-dark.css"/>
 </head>
-<body>
+<body class="dk pg-lounge">
 <div class="page">
   <header class="nav"><div class="nav-in">
-    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></a>
+    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></a>
     <nav class="nav-links"><a href="index.html">Home</a><a href="#pk">Packages</a><a href="#book">Book</a><a href="#my">My bookings</a></nav>
     <a class="btn btn-primary btn-sm" href="#book">Book now</a>
   </div></header>
+  <section class="hero"><span class="pill">Venue space</span><h1 id="hTitle">&nbsp;</h1><p class="lead" id="hSub"></p><div id="hBadge"></div><div class="hero-cta" id="hCta" style="margin-top:18px"></div><div class="hchips" id="hChips"></div></section>
   <main id="app"><div class="empty"><div class="spin dark"></div></div></main>
   <footer><div style="margin-bottom:8px"><span id="footLogo"></span></div><div style="opacity:.7">© <span id="yr"></span> MentoBeam. All rights reserved.</div></footer>
 </div>
