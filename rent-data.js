@@ -11,7 +11,10 @@ const DEF_RENTAL = {
   whatsapp: '071 303 8448', email: 'info@mentobeam.com', web: 'mentobeam.com',
   address: '274/1/1, High Level Road, Navinna, Maharagama', hours: 'Weekdays 9.00 am to 6.00 pm · Weekends on request',
   included: ['Air conditioning', 'Smart board', 'Fibre WiFi', 'Layout set up for you', 'Washrooms', 'Drinking water', 'Lounge access'],
-  terms: DEF_TERMS
+  terms: DEF_TERMS,
+  // advance payment / refund (editable in Admin -> Rentals -> Terms & contact)
+  advancePct: 50, refundDays: 7, refundHours: 48,
+  bankName: '', bankBranch: '', bankAccName: '', bankAccNo: '', payNote: ''
 };
 /* package modes: hourly = price × hours (min hours) | fixed = one price | unit_hour = price × units × hours | quote = on request
    extra "per": flat | hour | unit_hour | request */
@@ -111,3 +114,30 @@ function calcEstimate(sp, sel) {
   return { total, lines, quote };
 }
 function waLink(num, text) { const n = String(num || '').replace(/\D/g, '').replace(/^0/, '94'); return 'https://wa.me/' + n + (text ? '?text=' + encodeURIComponent(text) : ''); }
+
+/* ---------- advance payment, slips, refunds ---------- */
+const LK_BANKS = ['Bank of Ceylon', "People's Bank", 'Commercial Bank', 'Hatton National Bank (HNB)', 'Sampath Bank', 'Seylan Bank', 'Nations Trust Bank (NTB)', 'DFCC Bank', 'NDB Bank', 'Pan Asia Bank', 'Union Bank', 'Amana Bank', 'Cargills Bank', 'National Savings Bank (NSB)', 'Regional Development Bank', 'Other'];
+const advanceOf = (total, pct) => total > 0 ? Math.ceil(total * (pct || 50) / 100 / 100) * 100 : 0;      // rounded up to the next Rs 100
+const daysUntil = d => Math.round((parseD(d).getTime() - new Date(new Date().toDateString()).getTime()) / 864e5);
+const SLIP_MAX_PDF = 650 * 1024;
+const fileToDataUrl = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Could not read the file.')); r.readAsDataURL(f); });
+function imgToJpeg(file, maxPx, q) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { try { const k = Math.min(1, maxPx / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q)); } catch (e) { rej(e); } };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Could not open that image.')); }; im.src = url;
+  });
+}
+/* returns {data,type,name,size} – an image (compressed JPG) or a small PDF, always < ~900 KB so it fits one database record */
+async function slipToData(file) {
+  if (file.type === 'application/pdf') {
+    if (file.size > SLIP_MAX_PDF) throw new Error('That PDF is too large (max 650 KB). Please upload a photo or screenshot of the slip instead.');
+    return { data: await fileToDataUrl(file), type: 'application/pdf', name: file.name, size: file.size };
+  }
+  if (!/^image\//.test(file.type)) throw new Error('Please upload a photo (JPG/PNG) or a PDF of the slip.');
+  let data; try { data = await imgToJpeg(file, 1400, .75); if (data.length > 800000) data = await imgToJpeg(file, 1000, .6); }
+  catch (e) { if (file.size <= SLIP_MAX_PDF) data = await fileToDataUrl(file); else throw new Error('Could not process that image. Please try another photo.'); }
+  if (data.length > 900000) throw new Error('That image is too large. Please upload a smaller photo.');
+  return { data, type: data.startsWith('data:image/jpeg') ? 'image/jpeg' : file.type, name: file.name.replace(/\.[^.]+$/, '') + '.jpg', size: Math.round(data.length * 3 / 4) };
+}
