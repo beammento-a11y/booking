@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="icon.png"/>
 <title>MentoBeam – Yes For PTE | Simulation Exam Booking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="theme.css"/>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -124,12 +124,13 @@ footer a{color:#9ec5ff}
 .lb{max-width:960px;padding:12px;background:#000}
 .lb img{width:100%;max-height:80vh;object-fit:contain;display:block;border-radius:10px}
 </style>
+<link rel="stylesheet" href="theme-dark.css"/>
 </head>
-<body>
+<body class="dk pg-exam">
 <div class="page">
   <header class="nav">
     <div class="nav-in">
-      <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></a>
+      <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></a>
       <nav class="nav-links">
         <a href="index.html">Home</a><a href="#dates">Exam Dates</a><a href="#mybookings">My Bookings</a><a href="#about">Rules</a><a href="#gallery" id="navGal" hidden>Gallery</a>
       </nav>
@@ -138,7 +139,7 @@ footer a{color:#9ec5ff}
   </header>
 
   <section class="hero" id="home">
-    <span class="tag"><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></span>
+    <span class="tag"><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></span>
     <h1 id="heroTitle">Welcome to the <span>MentoBeam</span> PTE Simulation Exam</h1>
     <p class="lead" id="heroMsg">Practise in real exam conditions, get ready with confidence. Pick a date & time that suits you and reserve your seat in a minute.</p>
     <div class="hero-cta">
@@ -186,8 +187,8 @@ footer a{color:#9ec5ff}
 
 <script>
 injectDeco();
-$('#navLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>';
-$('#footLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>';
+$('#navLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>';
+$('#footLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>';
 $('#yr').textContent = new Date().getFullYear();
 if (!CONFIGURED) showConfigWarning();
 
