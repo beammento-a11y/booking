@@ -46,3 +46,11 @@
 .rn-xrow{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}.rn-xrow label{flex:1;display:flex;gap:8px;align-items:center;cursor:pointer}.rn-xrow input[type=number]{width:80px;padding:6px 8px}
 .rn-est{background:var(--soft);border-radius:14px;padding:14px 16px;margin:14px 0;font-size:14px}.rn-est .l{display:flex;justify-content:space-between;padding:2px 0}.rn-est .t{font-weight:800;font-size:18px;color:var(--navy);border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
 .rn-my{display:grid;gap:10px;margin-top:10px}.rn-my>div{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:14px}
+
+/* advance payment / slips / refunds */
+.rn-pay input[type=file]{padding:8px;margin:4px 0}
+.rn-paybox{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px}
+.rn-adv{text-align:right}.rn-adv span{display:block;font-size:12px;color:var(--muted)}.rn-adv b{font-size:24px;color:var(--red)}
+.rn-bk{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}.rn-bk span{width:120px;color:var(--muted);flex-shrink:0}.rn-bk b{flex:1;word-break:break-all}
+.rn-pl{margin-top:6px;font-size:13px}
+.rn-remind{margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(242,181,58,.12);border:1px solid rgba(242,181,58,.4);font-size:13px;color:#8a5a00;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
