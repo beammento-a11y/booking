@@ -5,28 +5,32 @@
 <link rel="icon" type="image/png" href="icon.png"/><link rel="apple-touch-icon" href="icon.png"/>
 <title>MentoBeam – Exams, Venue Hire & Training Spaces</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="theme.css"/><link rel="stylesheet" href="site.css"/><link rel="stylesheet" href="rent.css"/>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 <script src="common.js"></script><script src="rent-data.js"></script>
+<link rel="stylesheet" href="theme-dark.css"/>
 </head>
-<body>
+<body class="dk pg-home">
 <div class="page">
   <header class="nav"><div class="nav-in">
-    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yesforpte-removebg-preview.png" alt="Yes For PTE"/></a>
+    <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></a>
     <nav class="nav-links"><a href="#book">Book</a><a href="#terms">Booking terms</a><a href="#contact">Contact</a></nav>
     <a class="btn btn-primary btn-sm" href="exam.html">Register for Sim Exam</a>
   </div></header>
 
   <section class="hero" id="home">
-    <h1>Welcome to <span>MentoBeam</span></h1>
-    <p class="lead" id="intro">Skills & Innovation Center, Navinna, Maharagama.</p>
+    <span class="pill">Mentobeam Skills &amp; Innovation Center</span>
+    <h1>Welcome to <span>Mentobeam</span></h1>
+    <p class="lead" id="intro">Skills &amp; Innovation Center, Navinna, Maharagama.</p>
+    <div class="hero-cta"><a class="btn btn-primary btn-lg" href="exam.html">Register for Sim Exam</a><a class="btn btn-ghost btn-lg" href="#book">Hire a space</a></div>
+    <div class="hchips"><span>PTE simulation exams</span><span>50 to 100 seats</span><span>Smart board</span><span>Computer lab</span><span>Event support</span></div>
   </section>
 
   <div class="rn-wrap"><section class="rn-sec" id="book">
-    <h2>What would you like to book?</h2><p class="muted" style="margin-bottom:16px">Tap a card to see packages and rates.</p>
+    <span class="pill">Book</span><h2 style="margin-top:12px;font-size:clamp(1.6rem,4vw,2.4rem);font-weight:900">What would you like to book?</h2><p class="muted" style="margin-bottom:16px">Tap a card to see packages and rates.</p>
     <div class="rn-grid" id="cards"><div class="empty" style="grid-column:1/-1"><div class="spin dark"></div></div></div>
   </section>
 
@@ -40,7 +44,7 @@
 </div>
 <script>
 injectDeco();
-$('#navLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>'; $('#footLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>';
+$('#navLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>'; $('#footLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>';
 $('#yr').textContent = new Date().getFullYear();
 let R = null;
 const photoOf = s => (s.photos && s.photos[0]) || '';
