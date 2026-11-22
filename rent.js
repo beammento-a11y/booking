@@ -8,7 +8,7 @@ const stBadge = s => { const [t, c] = STB[s] || STB.pending; return `<span class
 
 async function init() {
   injectDeco();
-  $('#navLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>'; $('#footLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>'; $('#yr').textContent = new Date().getFullYear();
+  $('#navLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>'; $('#footLogo').innerHTML = '<img src="nav-logo-light.png" alt="MentoBeam"/>'; $('#yr').textContent = new Date().getFullYear();
   R = await loadRentals(); S = R.spaces.find(x => x.id === SID);
   if (!S) { app.innerHTML = '<div class="empty"><p>Space not found.</p></div>'; return; }
   document.title = S.name + ' – MentoBeam';
@@ -17,16 +17,25 @@ async function init() {
   render(); loadMy();
 }
 function gallery() {
-  const ph = S.photos || []; if (!ph.length) return `<div class="rn-gal"><div class="main" style="display:flex;align-items:center;justify-content:center;font-size:80px;background:linear-gradient(135deg,var(--navy),var(--blue))">${S.icon || ''}</div></div>`;
+  const ph = S.photos || []; if (!ph.length) return `<div class="rn-gal"><div class="main" style="display:flex;align-items:center;justify-content:center;font-size:80px;background:linear-gradient(135deg,#1a2338,#0b0f18)">${S.icon || ''}</div></div>`;
   return `<div class="rn-gal"><img class="main" id="gMain" src="${esc(ph[gi] || ph[0])}" alt=""/>${ph.length > 1 ? `<div class="th">${ph.map((p, i) => `<img src="${esc(p)}" data-i="${i}" class="${i === gi ? 'on' : ''}" alt=""/>`).join('')}</div>` : ''}</div>`;
 }
+function hero() {
+  const w = S.name.split(' '), last = w.pop();
+  $('#hTitle').innerHTML = (w.length ? esc(w.join(' ')) + ' ' : '') + '<span>' + esc(last) + '</span>';
+  $('#hSub').textContent = S.tagline || '';
+  $('#hBadge').innerHTML = S.available ? '<span class="badge b-ok">Available for booking</span>' : '<span class="badge b-gray">Not available right now</span>';
+  $('#hCta').innerHTML = (S.available ? '<a class="btn btn-primary btn-lg" href="#book">Book now</a>' : '') + '<a class="btn btn-ghost btn-lg" href="#pk">View packages</a>';
+  $('#hChips').innerHTML = (S.features || []).slice(0, 4).map(f => `<span>${esc(f)}</span>`).join('');
+  const ph = S.photos && S.photos[0]; if (ph && String(ph).startsWith('data:')) document.body.style.setProperty('--hero', 'url("' + ph + '")');   // photo uploaded by admin
+}
 function render() {
+  hero();
   const p = S.packages.find(x => x.id === sel.pkg);
   app.innerHTML = `<div class="rn-wrap">
   <a href="index.html" class="muted" style="display:inline-block;margin-top:18px;font-weight:700;text-decoration:none">← All services</a>
-  <div class="rn-hero"><div><span class="badge ${S.available ? 'b-ok' : 'b-gray'}">${S.available ? 'Available for booking' : 'Not available right now'}</span>
-    <h1 style="font-size:clamp(30px,5vw,44px);margin:10px 0 6px">${esc(S.name)}</h1><p style="color:var(--red);font-weight:700">${esc(S.tagline || '')}</p>
-    <p style="margin-top:10px">${esc(S.desc || '')}</p>${S.idealFor ? `<p style="margin-top:10px"><b style="color:var(--red);font-size:12px;letter-spacing:.08em">IDEAL FOR</b><br>${esc(S.idealFor)}</p>` : ''}
+  <div class="rn-hero"><div>
+    <p>${esc(S.desc || '')}</p>${S.idealFor ? `<p style="margin-top:10px"><b style="color:var(--red);font-size:12px;letter-spacing:.08em">IDEAL FOR</b><br>${esc(S.idealFor)}</p>` : ''}
     ${S.stats.length ? `<div class="rn-stats">${S.stats.map(x => `<div><b>${esc(x.v)}</b><span>${esc(x.l)}</span></div>`).join('')}</div>` : ''}
     <div class="rn-chips">${S.features.map(f => `<span class="rn-chip">${esc(f)}</span>`).join('')}</div></div>${gallery()}</div>
 
@@ -85,33 +94,85 @@ function est() {
   box.innerHTML = `<b>Summary</b>${end ? `<div class="l"><span>Time</span><span>${fmtTime(st)} – ${fmtTime(end)}</span></div>` : ''}${e.lines.map(l => `<div class="l"><span>${esc(l[0])}</span><span>${l[1] == null ? 'On request' : rs(l[1])}</span></div>`).join('')}
     <div class="t l"><span>Estimated total</span><span>${e.lines.some(l => l[1] != null) ? rs(e.total) : '—'}${e.quote && e.total ? ' + on request items' : ''}</span></div>${warn}<div class="help">Final price is confirmed by Mentobeam.</div>`;
 }
-async function submit() {
+function collect() {
   const err = $('#fErr'), v = vals(), e = calcEstimate(S, { pkg: sel.pkg, hours: v.hours, units: v.units, extras: v.ex });
   const date = $('#fDate').value, start = $('#fStart').value, name = $('#fName').value.trim(), email = $('#fEmail').value.trim(), phone = $('#fPhone').value.trim(), guests = +$('#fGuests').value || 0;
   err.textContent = '';
-  if (!date || date < todayStr()) { err.textContent = 'Please choose a date (today or later).'; return; }
-  if (v.p.mode !== 'quote' && v.hours <= 0) { err.textContent = 'Please enter the number of hours.'; return; }
-  if (guests < 1 || (S.maxGuests && guests > S.maxGuests)) { err.textContent = 'Guests must be between 1 and ' + (S.maxGuests || 'the venue limit') + '.'; return; }
-  if (name.length < 2) { err.textContent = 'Please enter your name.'; return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return; }
-  if (!/^[+\d][\d\s\-]{6,18}$/.test(phone)) { err.textContent = 'Please enter a valid phone number.'; return; }
+  if (!date || date < todayStr()) { err.textContent = 'Please choose a date (today or later).'; return null; }
+  if (v.p.mode !== 'quote' && v.hours <= 0) { err.textContent = 'Please enter the number of hours.'; return null; }
+  if (guests < 1 || (S.maxGuests && guests > S.maxGuests)) { err.textContent = 'Guests must be between 1 and ' + (S.maxGuests || 'the venue limit') + '.'; return null; }
+  if (name.length < 2) { err.textContent = 'Please enter your name.'; return null; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return null; }
+  if (!/^[+\d][\d\s\-]{6,18}$/.test(phone)) { err.textContent = 'Please enter a valid phone number.'; return null; }
   const exList = S.extras.filter(x => v.ex[x.id]).map(x => ({ id: x.id, name: x.name, qty: v.ex[x.id] }));
-  const data = { spaceId: S.id, spaceName: S.name, packageId: v.p.id, packageName: v.p.name, date, startTime: start, endTime: v.hours ? addMinutes(start, v.hours * 60) : '', hours: v.hours, units: v.units, guests,
+  const est2 = e.lines.some(l => l[1] != null) ? e.total : 0, pct = advPct();
+  return { spaceId: S.id, spaceName: S.name, packageId: v.p.id, packageName: v.p.name, date, startTime: start, endTime: v.hours ? addMinutes(start, v.hours * 60) : '', hours: v.hours, units: v.units, guests,
     layout: ($('#fLayout') || {}).value || '', extras: exList, extrasText: exList.map(x => x.name + (x.qty > 1 ? ' x' + x.qty : '')).join('; '),
-    estimate: e.lines.some(l => l[1] != null) ? e.total : 0, quoteItems: !!e.quote, name, email, phone, notes: $('#fNotes').value.trim().slice(0, 600), status: 'pending', createdAt: Date.now() };
-  const btn = $('#fBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
+    estimate: est2, quoteItems: !!e.quote, advanceDue: advanceOf(est2, pct), advancePct: pct, paidClaim: false,
+    name, email, phone, notes: $('#fNotes').value.trim().slice(0, 600), status: 'pending', createdAt: Date.now() };
+}
+const advPct = () => Number(R.rental.advancePct) || 50;
+const refundDays = () => (R.rental.refundDays === '' || R.rental.refundDays == null) ? 7 : Number(R.rental.refundDays);
+const bankReady = () => !!(R.rental.bankAccNo && R.rental.bankAccName);
+const waNote = id => waLink(R.rental.whatsapp, 'Hi, regarding my ' + S.name + ' booking. Code: ' + id);
+
+/* step 1: validated form -> payment step (the booking is only placed after the advance is paid) */
+async function submit() {
+  const data = collect(); if (!data) return;
+  if (data.advanceDue <= 0) {   // price is "on request" – nothing to pay yet
+    if (!await confirmBox('The price for this booking is agreed with us first, so there is no advance to pay right now. We will contact you with the price and payment details.', { okText: 'Send request', title: 'Send booking request?' })) return;
+    return place(data, null, null);
+  }
+  if (!bankReady()) { modal(`<div class="rn-closed" style="margin:0">Online payment details are not available yet. Please contact us on WhatsApp <b>${esc(R.rental.whatsapp || '')}</b> to place this booking.</div><a class="btn btn-primary btn-block" style="margin-top:12px" target="_blank" rel="noopener" href="${waLink(R.rental.whatsapp, 'Hi, I would like to book ' + S.name + ' on ' + data.date)}">Message us on WhatsApp</a>`); return; }
+  payStep(data);
+}
+function payStep(data) {
+  const r = R.rental; let slip = null;
+  const row = (l, v, cp) => `<div class="rn-bk"><span>${l}</span><b>${esc(v)}</b>${cp ? `<button type="button" class="btn btn-ghost btn-sm" data-cp="${esc(v)}">Copy</button>` : ''}</div>`;
+  const m = modal(`<div class="rn-pay"><h2 class="mh" style="padding:0">Pay the advance to place your booking</h2><p class="msub">Your booking is placed after you pay the ${data.advancePct}% advance by bank transfer and tell us below.</p>
+    <div class="rn-paybox"><div><b>${esc(S.name)}</b> · ${esc(data.packageName)}<br>${fmtDate(data.date)}${data.endTime ? ' · ' + fmtTime(data.startTime) + ' – ' + fmtTime(data.endTime) : ''}<br><span class="muted">Estimated total ${rs(data.estimate)}${data.quoteItems ? ' + on-request items' : ''}</span></div>
+      <div class="rn-adv"><span>Advance to pay (${data.advancePct}%)</span><b>${rs(data.advanceDue)}</b></div></div>
+    <h3 style="font-size:15px;margin:14px 0 6px">Bank transfer details</h3>
+    ${row('Bank', r.bankName)}${r.bankBranch ? row('Branch', r.bankBranch) : ''}${row('Account name', r.bankAccName)}${row('Account number', r.bankAccNo, true)}${row('Reference', data.name + ' – ' + data.phone)}
+    ${r.payNote ? `<p class="help" style="margin-top:6px">${esc(r.payNote)}</p>` : ''}
+    <h3 style="font-size:15px;margin:16px 0 6px">Upload your payment slip</h3>
+    <input type="file" id="slipF" accept="image/*,application/pdf"/><div id="slipPrev" class="help"></div>
+    <p class="help">Photo / screenshot (JPG, PNG) or a small PDF. You can also attach it later from “My bookings”, but we cannot confirm the booking until we receive it.</p>
+    <div class="err" id="payErr"></div>
+    <button class="btn btn-primary btn-block btn-lg" id="payBtn" type="button">I made the advance payment</button><button class="btn btn-ghost btn-block" id="payBack" type="button" style="margin-top:8px">Back</button></div>`);
+  m.$('#payBack').onclick = () => m.close();
+  m.el.querySelectorAll('[data-cp]').forEach(b => b.onclick = () => { try { navigator.clipboard.writeText(b.dataset.cp); toast('Copied', 'ok'); } catch (e) { /* ignore */ } });
+  m.$('#slipF').onchange = async e => {
+    const f = e.target.files[0], pr = m.$('#slipPrev'), er = m.$('#payErr'); er.textContent = ''; slip = null; pr.textContent = ''; if (!f) return;
+    try { slip = await slipToData(f); pr.innerHTML = '✅ ' + esc(slip.name) + ' (' + Math.round(slip.size / 1024) + ' KB)' + (slip.type.startsWith('image') ? `<br><img src="${slip.data}" alt="" style="max-height:120px;border-radius:10px;margin-top:6px"/>` : ''); }
+    catch (x) { er.textContent = errMsg(x); e.target.value = ''; }
+  };
+  m.$('#payBtn').onclick = async () => {
+    if (!slip && !await confirmBox('You have not attached the payment slip. You can attach it later from “My bookings”, but we cannot confirm your booking until we receive it. Place the booking now?', { okText: 'Place booking', title: 'No slip attached' })) return;
+    const b = m.$('#payBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Placing booking...';
+    const ok = await place(data, slip, m); if (!ok) { b.disabled = false; b.textContent = 'I made the advance payment'; }
+  };
+}
+/* step 2: write the booking (+ slip) in ONE atomic batch */
+async function place(data, slip, pm) {
+  const err = pm ? pm.$('#payErr') : $('#fErr'), ref = db.collection('rentBookings').doc();
+  if (slip) { data.paidClaim = true; data.slipAt = Date.now(); data.slipName = String(slip.name || 'slip').slice(0, 100); }
   try {
-    const ref = db.collection('rentBookings').doc(); await ref.set(data);
-    localStorage.setItem('mb_profile', JSON.stringify({ name, email, phone }));
-    if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [ref.id], records: { [ref.id]: flat(data) } });
-    myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy();
-    const m = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Request sent!</h2><p class="msub">Thank you, ${esc(name.split(' ')[0])}. We will contact you to confirm and arrange the 50% advance.</p>
-      <p><b>${esc(S.name)}</b> · ${esc(v.p.name)}<br>${fmtDate(date)}${data.endTime ? ' · ' + fmtTime(start) + ' – ' + fmtTime(data.endTime) : ''}</p><p class="help" style="margin:8px 0">Booking code: <span style="font-family:monospace">${ref.id}</span></p>
-      <a class="btn btn-ghost btn-block" target="_blank" rel="noopener" href="${waLink(R.rental.whatsapp, 'Hi, I just requested ' + S.name + ' on ' + date + '. Code: ' + ref.id)}">Message us on WhatsApp</a><button class="btn btn-blue btn-block" style="margin-top:8px" id="okd">Done</button></div>`);
-    m.$('#okd').onclick = () => { m.close(); location.hash = '#my'; };
-    $('#rf').reset(); dyn(); est();
-  } catch (x) { err.textContent = 'Sorry, the request could not be sent. ' + errMsg(x); }
-  btn.disabled = false; btn.textContent = 'Send booking request';
+    const b = db.batch(); b.set(ref, data);
+    if (slip) b.set(db.collection('rentSlips').doc(ref.id), { data: slip.data, type: slip.type, name: data.slipName, size: slip.size || 0, at: Date.now() });
+    await b.commit();
+  } catch (x) { err.textContent = 'Sorry, the booking could not be placed. ' + errMsg(x); return false; }
+  localStorage.setItem('mb_profile', JSON.stringify({ name: data.name, email: data.email, phone: data.phone }));
+  if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [ref.id], records: { [ref.id]: flat(data) } });
+  myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy();
+  if (pm) pm.close();
+  const m = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Booking request placed!</h2>
+    <p class="msub">Thank you, ${esc(data.name.split(' ')[0])}. ${data.advanceDue > 0 ? (slip ? 'We received your payment slip and will verify it and confirm your booking.' : 'Please attach your payment slip from “My bookings” so we can verify your payment and confirm.') : 'We will contact you with the price and payment details.'}</p>
+    <p><b>${esc(S.name)}</b> · ${esc(data.packageName)}<br>${fmtDate(data.date)}${data.endTime ? ' · ' + fmtTime(data.startTime) + ' – ' + fmtTime(data.endTime) : ''}</p><p class="help" style="margin:8px 0">Booking code: <span style="font-family:monospace">${ref.id}</span></p>
+    <a class="btn btn-ghost btn-block" target="_blank" rel="noopener" href="${waNote(ref.id)}">Message us on WhatsApp</a><button class="btn btn-blue btn-block" style="margin-top:8px" id="okd">Done</button></div>`);
+  m.$('#okd').onclick = () => { m.close(); location.hash = '#my'; };
+  const f = $('#rf'); if (f) { f.reset(); dyn(); est(); }
+  return true;
 }
 const flat = d => { const o = Object.assign({}, d); delete o.extras; return o; };
 async function loadMy() {
@@ -119,17 +180,64 @@ async function loadMy() {
   await Promise.all(miss.map(async id => { try { const s = await db.collection('rentBookings').doc(id).get(); myDocs[id] = s.exists ? { id, ...s.data() } : null; } catch (e) { myDocs[id] = undefined; } }));
   renderMy();
 }
+function payLine(b) {
+  let h = '';
+  if (b.advanceDue > 0 && b.status !== 'cancelled') {
+    h += `<div class="rn-pl">Advance ${rs(b.advanceDue)} · ${b.advanceVerified ? '<span class="badge b-ok">✓ Advance verified</span>' : (b.slipAt ? '<span class="badge b-blue">Slip received – being verified</span>' : '<span class="badge b-warn">Slip not attached</span>')}</div>`;
+    if (!b.advanceVerified && !b.slipAt) h += `<div class="rn-remind">⚠ Please attach your bank slip so we can verify your payment and confirm your booking. <button class="btn btn-primary btn-sm" data-sl="${b.id}">Attach slip</button></div>`;
+  }
+  if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours.</div>`;
+  if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundAmount || 0)}</div>`;
+  return h;
+}
 function renderMy() {
   const list = myIds.map(id => myDocs[id]).filter(b => b && b.spaceId === SID).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
   $('#my').hidden = !list.length; if (!list.length) return;
-  $('#myList').innerHTML = list.map(b => `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}${b.estimate ? ' · ' + rs(b.estimate) : ''}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span></div>
-    <div style="text-align:right">${stBadge(b.status)}${(b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">Cancel</button>` : ''}</div></div>`).join('');
+  $('#myList').innerHTML = list.map(b => { const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr(), refundable = can && b.paidClaim && b.advanceDue > 0 && daysUntil(b.date) >= refundDays();
+    return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}${b.estimate ? ' · ' + rs(b.estimate) : ''}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
+    <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}</div></div>`; }).join('');
   $$('[data-c]').forEach(x => x.onclick = () => cancelMy(x.dataset.c));
+  $$('[data-sl]').forEach(x => x.onclick = () => attachSlip(x.dataset.sl));
+}
+/* attach (or replace) the payment slip later */
+function attachSlip(id) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf';
+  inp.onchange = async () => { const f = inp.files[0]; if (!f) return;
+    try { toast('Uploading slip…'); const sl = await slipToData(f), name = String(sl.name).slice(0, 100), at = Date.now(), b = db.batch();
+      b.set(db.collection('rentSlips').doc(id), { data: sl.data, type: sl.type, name, size: sl.size || 0, at }); b.update(db.collection('rentBookings').doc(id), { slipAt: at, slipName: name, paidClaim: true }); await b.commit();
+      Object.assign(myDocs[id], { slipAt: at, slipName: name, paidClaim: true }); renderMy(); toast('Slip attached – thank you!', 'ok');
+      if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(myDocs[id]) } });
+    } catch (e) { toast(errMsg(e), 'err'); } };
+  inp.click();
 }
 async function cancelMy(id) {
-  const ok = await confirmBox('Cancel 7 or more days ahead for a full refund of the advance. Later cancellations keep the advance.', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
-  try { await db.collection('rentBookings').doc(id).update({ status: 'cancelled', cancelledAt: Date.now() }); myDocs[id].status = 'cancelled'; renderMy(); toast('Booking cancelled', 'ok');
-    if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(myDocs[id]) } });
+  const b = myDocs[id]; if (!b) return;
+  const refundable = b.paidClaim && b.advanceDue > 0 && daysUntil(b.date) >= refundDays();
+  if (refundable) return refundForm(b);
+  const late = b.paidClaim && b.advanceDue > 0;
+  const ok = await confirmBox(late ? 'This booking is inside the no-refund period (cancel ' + refundDays() + ' or more days ahead for a refund), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
+  try { await db.collection('rentBookings').doc(id).update({ status: 'cancelled', cancelledAt: Date.now() }); Object.assign(b, { status: 'cancelled' }); renderMy(); toast('Booking cancelled', 'ok');
+    if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
+}
+function refundForm(b) {
+  const hrs = R.rental.refundHours || 48;
+  const m = modal(`<h2 class="mh" style="padding:0">Cancel and request refund</h2><p class="msub">Your advance of <b>${rs(b.advanceDue)}</b> will be refunded to the bank account below. <b>The refund is paid within ${hrs} hours</b> after we process your request, and we will message you on WhatsApp when it is done.</p>
+    <div class="field"><label>Bank <span class="req">*</span></label><select id="rfBank"><option value="">Select your bank</option>${LK_BANKS.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+    <div class="field"><label>Account name <span class="req">*</span></label><input id="rfName" value="${esc(b.name)}"/></div>
+    <div class="field"><label>Account number <span class="req">*</span></label><input id="rfNo" inputmode="numeric" placeholder="e.g. 1234567890"/></div>
+    <div class="field"><label>Note (optional)</label><textarea id="rfNote" placeholder="Reason for cancelling, or anything we should know"></textarea></div>
+    <div class="err" id="rfErr"></div><button class="btn btn-primary btn-block btn-lg" id="rfGo">Cancel booking & request refund</button><button class="btn btn-ghost btn-block" id="rfBack" style="margin-top:8px">Keep my booking</button>`);
+  m.$('#rfBack').onclick = () => m.close();
+  m.$('#rfGo').onclick = async () => {
+    const bank = m.$('#rfBank').value, nm = m.$('#rfName').value.trim(), no = m.$('#rfNo').value.replace(/[\s-]/g, ''), er = m.$('#rfErr'); er.textContent = '';
+    if (!bank) { er.textContent = 'Please select your bank.'; return; } if (nm.length < 2) { er.textContent = 'Please enter the account name.'; return; } if (!/^\d{6,20}$/.test(no)) { er.textContent = 'Please enter a valid account number (digits only).'; return; }
+    const up = { status: 'cancelled', cancelledAt: Date.now(), refundStatus: 'requested', refundBank: bank, refundAccName: nm.slice(0, 100), refundAccNo: no, refundNote: m.$('#rfNote').value.trim().slice(0, 300), refundAmount: b.advanceDue, refundRequestedAt: Date.now() };
+    const btn = m.$('#rfGo'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
+    try { await db.collection('rentBookings').doc(b.id).update(up); Object.assign(b, up); m.close(); renderMy();
+      const m2 = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund requested</h2><p class="msub">Your booking is cancelled. Your refund of <b>${rs(b.advanceDue)}</b> will be paid within <b>${hrs} hours</b>. We will message you on WhatsApp once it is done.</p><button class="btn btn-blue btn-block" id="okr">OK</button></div>`); m2.$('#okr').onclick = m2.close;
+      if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [b.id], records: { [b.id]: flat(b) } });
+    } catch (e) { er.textContent = errMsg(e); btn.disabled = false; btn.textContent = 'Cancel booking & request refund'; }
+  };
 }
 init();
