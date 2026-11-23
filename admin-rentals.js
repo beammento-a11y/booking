@@ -18,9 +18,9 @@ function rSys(b) {
 /* ---------- advance payment slips + refunds ---------- */
 const rSiteBase = () => location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
 const rMask = n => '****' + String(n || '').slice(-4);
-function rRefundWithin(b) {   // was the cancellation made inside the refund period?
-  const days = (rentalCfg.refundDays === '' || rentalCfg.refundDays == null) ? 7 : Number(rentalCfg.refundDays), c = new Date(b.cancelledAt || Date.now()); c.setHours(0, 0, 0, 0);
-  return (parseD(b.date).getTime() - c.getTime()) / 864e5 >= days;
+function rRefundWithin(b) {   // was the cancellation made within the refund window counted from when the admin confirmed the booking?
+  const days = (rentalCfg.refundDays === '' || rentalCfg.refundDays == null) ? 7 : Number(rentalCfg.refundDays);
+  return refundWithin(b, days, b.cancelledAt || Date.now());
 }
 // the browser type of a slip is forced from an allow-list (never trusted from the file) so a fake slip can never run as a web page
 const rSlipBlob = async sl => { const raw = await (await fetch(sl.data)).blob(); return new Blob([raw], { type: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(sl.type) ? sl.type : 'application/octet-stream' }); };
@@ -177,7 +177,7 @@ function rTermsHTML() {
     <div class="row2">${f('rtWa', 'WhatsApp number', r.whatsapp || '')}${f('rtMail', 'Email', r.email || '')}</div><div class="row2">${f('rtWeb', 'Website', r.web || '')}${f('rtHours', 'Opening hours', r.hours || '')}</div>${f('rtAddr', 'Address', r.address || '')}
     <h3 style="margin-top:18px">Advance payment & refunds</h3><p class="help" style="margin-bottom:10px">Customers see the bank details after pressing “Book”; the booking is placed only after they pay the advance and press “I made the advance payment”.</p>
     <div class="row2">${f('rtBank', 'Bank name', r.bankName || '')}${f('rtBranch', 'Branch', r.bankBranch || '')}</div><div class="row2">${f('rtAccName', 'Account name', r.bankAccName || '')}${f('rtAccNo', 'Account number', r.bankAccNo || '')}</div>
-    ${f('rtPayNote', 'Payment note (optional)', r.payNote || '')}<div class="row2">${f('rtAdv', 'Advance %', r.advancePct != null ? r.advancePct : 50)}${f('rtRefDays', 'Refund allowed if cancelled this many days ahead', r.refundDays != null && r.refundDays !== '' ? r.refundDays : 7)}</div>${f('rtRefHrs', 'Refund paid within (hours) – shown to customers', r.refundHours != null ? r.refundHours : 48)}
+    ${f('rtPayNote', 'Payment note (optional)', r.payNote || '')}<div class="row2">${f('rtAdv', 'Advance %', r.advancePct != null ? r.advancePct : 50)}${f('rtRefDays', 'Refund allowed if cancelled within this many days of the booking being confirmed', r.refundDays != null && r.refundDays !== '' ? r.refundDays : 7)}</div>${f('rtRefHrs', 'Refund paid within (hours) – shown to customers', r.refundHours != null ? r.refundHours : 48)}
     <button class="btn btn-primary" data-act="rentSaveTerms">💾 Save</button></div>`;
 }
 
@@ -262,6 +262,7 @@ A.rentSaveTerms = (d, btn) => run(btn, async () => {
 });
 async function rSetStatus(id, status, extra) {
   const bk = rentBookings.find(x => x.id === id), sy = bk ? rSys(bk) : null, up = Object.assign({ status, statusAt: Date.now() }, extra || {});
+  if (status === 'confirmed' && bk && !bk.confirmedAt) up.confirmedAt = up.statusAt;   // refund window starts here and is fixed even if the status later changes
   if (sy !== null && bk && bk.estimate !== sy && up.totalFinal == null) { up.estimateCustomer = bk.estimate || 0; up.estimate = sy; }   // keep the system price, remember what the browser sent
   await db.collection('rentBookings').doc(id).update(up); sheetRent([id]);
 }
