@@ -41,7 +41,7 @@ function refCard(b) {
   return `<div class="card box" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div><h3 style="margin:0">${esc(b.name)} <span class="badge ${st === 'paid' ? 'b-ok' : st === 'rejected' ? 'b-red' : 'b-warn'}">${st === 'paid' ? '✓ refunded' : st === 'rejected' ? 'rejected' : 'refund requested'}</span></h3>
       <div class="muted" style="font-size:13px;margin-top:3px">${esc(b.spaceName)} · ${esc(b.packageName)} · ${fmtDate(b.date)}${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br>Cancelled by <b>${b.cancelledBy === 'admin' ? 'organiser' : 'customer'}</b> on ${fWhen(b.cancelledAt)} · requested ${fWhen(b.refundRequestedAt)}
-      <br>${within ? '<span class="badge b-ok">inside refund period</span>' : '<span class="badge b-red">LATE – outside refund period</span>'}</div></div>
+      <br>${within ? '<span class="badge b-ok">inside refund period</span>' : '<span class="badge b-red">LATE – outside refund period</span>'}</div>${rCancelProof(b)}</div>
     <div style="text-align:right"><div class="muted" style="font-size:12px">Refund amount</div><b style="font-size:26px;color:var(--red)">${rs(st === 'paid' && b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0))}</b><div class="muted" style="font-size:12px">Total ${rs(pi.total)} · advance ${rs(pi.advance)} ${pi.advPaid ? '(verified)' : '(not verified)'}</div></div></div>
     <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:12px">
       <div><b>Pay to this bank account</b>${bank('Bank', b.refundBank)}${bank('Account name', b.refundAccName)}${bank('Account number', b.refundAccNo, true)}${bank('Amount', String(b.refundAmount || 0), true)}</div>
@@ -113,7 +113,7 @@ views.income = {
     const mm = []; for (let i = 11; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); mm.push([k, all.filter(e => fDay(e.t).startsWith(k)).reduce((a, e) => a + e.amt, 0)]); }
     const mx = Math.max(1, ...mm.map(x => Math.abs(x[1])));
     view.innerHTML = `<div class="card box"><div class="fr" style="gap:10px;flex-wrap:wrap;align-items:center"><b>Period</b><select data-chg="incPer" style="max-width:220px"><option value="all" ${incPeriod === 'all' ? 'selected' : ''}>All time</option>${years.map(y => `<option value="${y}" ${incPeriod === y ? 'selected' : ''}>Year ${y}</option>`).join('')}${months.map(m => `<option value="${m}" ${incPeriod === m ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>
-      <button class="btn btn-ghost btn-sm" data-act="incCsv">⬇ Download CSV</button><button class="btn btn-ghost btn-sm" data-act="incPrint">🖨 Print / PDF</button><span class="muted">cash basis – money counted on the day it was verified / refunded</span></div></div>
+      <button class="btn btn-ghost btn-sm" data-act="incCsv">⬇ Download CSV</button><button class="btn btn-primary btn-sm" data-act="incPdf">⬇ Full system report (PDF)</button><span class="muted">cash basis – money counted on the day it was verified / refunded</span></div></div>
     <div class="stats"><div class="card stat"><i>💰</i><div><b>${rs(adv)}</b><span>Advances received</span></div></div><div class="card stat"><i>🧾</i><div><b>${rs(bal)}</b><span>Balances received</span></div></div><div class="card stat"><i>💸</i><div><b>${rs(ref)}</b><span>Refunds paid</span></div></div><div class="card stat" style="background:linear-gradient(135deg,rgba(47,210,122,.12),transparent)"><i>📈</i><div><b>${rs(net)}</b><span>NET INCOME</span></div></div></div>
     <div class="stats"><div class="card stat"><i>⏳</i><div><b>${rs(toCollect)}</b><span>Balances still to collect (${conf.length} confirmed)</span></div></div><div class="card stat"><i>📎</i><div><b>${rs(advAwait)}</b><span>Advances awaiting verification</span></div></div><div class="card stat"><i>↩️</i><div><b>${rs(owed)}</b><span>Refunds waiting to be paid</span></div></div></div>
     <div class="card box"><h3>Last 12 months – net income</h3><div style="display:flex;gap:6px;align-items:flex-end;height:130px">${mm.map(([k, v]) => `<div style="flex:1;text-align:center;font-size:10px" title="${monthLabel(k)}: ${rs(v)}"><div style="height:${Math.round(Math.abs(v) / mx * 100)}px;background:${v < 0 ? 'var(--red)' : 'var(--blue2)'};border-radius:6px 6px 0 0;min-height:2px"></div>${k.slice(5)}</div>`).join('')}</div></div>
@@ -129,10 +129,63 @@ A.incCsv = () => {
   const blob = new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' }), a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'income_' + (incPeriod || 'all') + '.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 };
-A.incPrint = () => {
-  const ent = incCur(), g = t => ent.filter(e => e.type === t).reduce((a, e) => a + e.amt, 0), w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print', 'err'); return; }
-  w.document.write(`<!doctype html><meta charset="utf-8"><title>Income ${esc(incPeriod)}</title><style>body{font:14px Arial;padding:24px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#eee}h1{margin:0 0 6px}</style>
-    <h1>Mentobeam – Rental income (${incPeriod === 'all' ? 'All time' : esc(incPeriod)})</h1><p>Advances ${rs(g('Advance'))} · Balances ${rs(g('Balance'))} · Refunds ${rs(-g('Refund'))} · <b>Net ${rs(g('Advance') + g('Balance') + g('Refund'))}</b></p>
-    <table><tr><th>Date</th><th>Type</th><th>Customer</th><th>Space</th><th>Booking date</th><th>Amount</th></tr>${ent.map(e => `<tr><td>${fDay(e.t)}</td><td>${e.type}</td><td>${esc(e.b.name)}</td><td>${esc(e.b.spaceName)}</td><td>${esc(e.b.date)}</td><td style="text-align:right">${e.amt < 0 ? '−' : ''}${rs(Math.abs(e.amt))}</td></tr>`).join('')}</table>`);
-  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+/* FULL SYSTEM REPORT = a formatted, downloadable PDF (logo, summary, by space, all bookings oldest first with payment + cancellation proof, cancellations with / without slip, refunds, transactions) */
+const pdfT = v => String(v == null ? '' : v).replace(/[^\x20-\x7E -ÿ–—‘’“”•…]/g, '?');   // the built-in PDF font only has Latin characters
+const pdfLogo = async () => { try { const bl = await (await fetch('nav-logo.png')).blob(), d = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(bl); }); return d; } catch (e) { return null; } };
+A.incPdf = async (d, btn) => {
+  if (!window.jspdf || !window.jspdf.jsPDF) { toast('PDF library did not load (check internet)', 'err'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing PDF…'; }
+  try {
+    const logo = await pdfLogo(), ent = incCur(), g = t => ent.filter(e => e.type === t).reduce((a, e) => a + e.amt, 0), per = incPeriod === 'all' ? '' : incPeriod;
+    const perLabel = !per ? 'All time' : (per.length === 4 ? 'Year ' + per : monthLabel(per));
+    const bks = rentBookings.filter(b => !per || (b.date || '').startsWith(per)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || (a.date + a.startTime).localeCompare(b.date + b.startTime));
+    const can = bks.filter(b => b.status === 'cancelled'), rfs = bks.filter(b => b.refundStatus), cnt = st => bks.filter(b => b.status === st).length;
+    const owes = b => Number(b.advanceDue) > 0, canW = can.filter(b => owes(b) && rHadSlip(b)).length, canN = can.filter(b => owes(b) && !rHadSlip(b)).length;
+    const sp = {}; bks.forEach(b => { const k = b.spaceName || b.spaceId, o = sp[k] = sp[k] || { n: 0, c: 0, x: 0, got: 0, ref: 0 }; o.n++; if (b.status === 'cancelled') o.x++; else if (b.status === 'completed') o.c++; });
+    ent.forEach(e => { const o = sp[e.b.spaceName || e.b.spaceId]; if (o) { if (e.amt > 0) o.got += e.amt; else o.ref -= e.amt; } });
+    const who = b => b.cancelledBy === 'admin' ? 'Organiser' : 'Customer', when = t => t ? fWhen(t) : '';
+    const proof = b => !owes(b) ? 'No advance due' : (rHadSlip(b) ? 'WITH slip' : 'WITHOUT slip' + (b.cancelAck ? ' (warning accepted)' : ''));
+    const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 36;
+    const NAVY = [6, 24, 47], RED = [192, 0, 26], BLUE = [11, 61, 145], GREY = [90, 107, 130];
+    const who2 = pdfT((me && (me.name || me.email)) || 'admin'), stamp = fWhen(Date.now());
+    const header = () => {
+      doc.setFillColor(255, 255, 255); doc.rect(0, 0, W, 64, 'F');
+      if (logo) { try { doc.addImage(logo, 'PNG', M, 14, 150, 26.3); } catch (e) { logo = null; } }
+      if (!logo) { doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(...NAVY); doc.text('MENTOBEAM', M, 36); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...NAVY); doc.text('Full System Report', W - M, 28, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY); doc.text('Rentals  |  ' + pdfT(perLabel) + '  |  Generated ' + stamp + ' by ' + who2, W - M, 43, { align: 'right' });
+      doc.setFillColor(...RED); doc.rect(0, 56, W, 4, 'F');
+    };
+    const card = (x, y, w, label, val, col) => { doc.setDrawColor(215, 222, 232); doc.setFillColor(247, 249, 252); doc.roundedRect(x, y, w, 46, 5, 5, 'FD'); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...(col || NAVY)); doc.text(pdfT(val), x + 10, y + 22); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GREY); doc.text(pdfT(label), x + 10, y + 36); };
+    header(); let y = 84;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...NAVY); doc.text('1. Summary', M, y); y += 10;
+    const cw = (W - 2 * M - 7 * 8) / 8;
+    [['Bookings', bks.length], ['Pending', cnt('pending')], ['Confirmed', cnt('confirmed')], ['Completed', cnt('completed')], ['Cancelled', can.length], ['Cancelled with slip', canW], ['Cancelled w/o slip', canN, RED], ['Refund requests', rfs.length]].forEach((c, k) => card(M + k * (cw + 8), y, cw, c[0], c[1], c[2]));
+    y += 56; const cw2 = (W - 2 * M - 3 * 8) / 4;
+    [['Advances received', rs(g('Advance'))], ['Balances received', rs(g('Balance'))], ['Refunds paid', rs(Math.abs(g('Refund')))], ['NET INCOME', rs(g('Advance') + g('Balance') + g('Refund')), [18, 161, 80]]].forEach((c, k) => card(M + k * (cw2 + 8), y, cw2, c[0], c[1], c[2]));
+    y += 62;
+    const common = { margin: { top: 76, left: M, right: M, bottom: 34 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 3.5, lineColor: [215, 222, 232], textColor: [30, 40, 55], overflow: 'linebreak' }, headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' }, alternateRowStyles: { fillColor: [247, 249, 252] }, didDrawPage: header, rowPageBreak: 'avoid' };
+    const section = (title, head, body, extra) => {
+      if (y > H - 110) { doc.addPage(); y = 84; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...NAVY); doc.text(title, M, y);
+      doc.autoTable(Object.assign({}, common, { startY: y + 8, head: [head], body: body.length ? body : [[{ content: 'Nothing in this period.', colSpan: head.length, styles: { halign: 'center', textColor: GREY } }]] }, extra || {}));
+      y = doc.lastAutoTable.finalY + 22;
+    };
+    const redCell = col => ({ didParseCell: h => { if (h.section === 'body' && h.column.index === col && /WITHOUT/.test(String(h.cell.raw))) { h.cell.styles.textColor = RED; h.cell.styles.fontStyle = 'bold'; } } });
+    const R = { halign: 'right' };
+    section('2. By space', ['Space', 'Bookings', 'Completed', 'Cancelled', 'Received', 'Refunds', 'Net'], Object.entries(sp).map(([k, o]) => [pdfT(k), o.n, o.c, o.x, rs(o.got), rs(o.ref), rs(o.got - o.ref)]), { columnStyles: { 4: R, 5: R, 6: Object.assign({ fontStyle: 'bold' }, R) } });
+    section('3. All bookings (oldest first)', ['#', 'Booked on', 'Code', 'Customer', 'Space / package', 'Booking date & time', 'Total', 'Advance', 'Balance', 'Status', 'Cancellation proof'],
+      bks.map((b, n) => { const pi = payInfo(b); return [n + 1, when(b.createdAt), b.id, pdfT(b.name) + '\n' + pdfT(b.phone), pdfT(b.spaceName) + '\n' + pdfT(b.packageName), pdfT(b.date) + (b.endTime ? '\n' + b.startTime + ' - ' + b.endTime : ''), rs(pi.total), rs(pi.advance) + (pi.advPaid ? ' (received)' : (b.slipAt ? ' (slip attached)' : (owes(b) ? ' (no slip)' : ''))), rs(pi.balance) + (pi.balPaid ? ' (paid)' : ''), b.status, b.status === 'cancelled' ? proof(b) + '\nby ' + who(b) + (b.cancelledAt ? '\n' + when(b.cancelledAt) : '') : '']; }),
+      Object.assign({ styles: Object.assign({}, common.styles, { fontSize: 7 }), columnStyles: { 0: { cellWidth: 20 }, 2: { cellWidth: 62, font: 'courier', fontSize: 6 } } }, redCell(10)));
+    section('4. Cancellations - with / without payment slip', ['Customer', 'Space', 'Booking date', 'Advance due', 'Slip', 'Cancelled by', 'Cancelled on', 'Refund'],
+      can.map(b => [pdfT(b.name) + '\n' + pdfT(b.phone), pdfT(b.spaceName), pdfT(b.date), rs(b.advanceDue || 0), proof(b), who(b), when(b.cancelledAt), b.refundStatus ? b.refundStatus + ' - ' + rs(b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0)) : 'none']), redCell(4));
+    section('5. Refunds', ['Customer', 'Space / booking date', 'Status', 'Requested', 'Amount', 'Paid / decided', 'Bank reference / reason'],
+      rfs.map(b => [pdfT(b.name), pdfT(b.spaceName) + '\n' + pdfT(b.date), b.refundStatus, when(b.refundRequestedAt), rs(b.refundStatus === 'paid' && b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0)), when(b.refundPaidAt), pdfT(b.refundRef || b.refundRejectReason || '')]), { columnStyles: { 4: R } });
+    section('6. Transactions (cash basis)', ['Date', 'Type', 'Customer', 'Space', 'Booking date', 'Amount'],
+      ent.slice().reverse().map(e => [fDay(e.t), e.type, pdfT(e.b.name), pdfT(e.b.spaceName), pdfT(e.b.date), (e.amt < 0 ? '-' : '') + rs(Math.abs(e.amt))]), { columnStyles: { 5: R } });
+    const n = doc.getNumberOfPages();
+    for (let p = 1; p <= n; p++) { doc.setPage(p); doc.setDrawColor(215, 222, 232); doc.line(M, H - 26, W - M, H - 26); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GREY); doc.text('Mentobeam Skills & Innovation Center - Full System Report - ' + pdfT(perLabel) + ' - Confidential', M, H - 14); doc.text('Page ' + p + ' / ' + n, W - M, H - 14, { align: 'right' }); }
+    doc.save('Mentobeam-full-system-report-' + (per || 'all-time') + '.pdf'); toast('Report downloaded', 'ok');
+  } catch (e) { toast('Could not create the PDF: ' + errMsg(e), 'err'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '⬇ Full system report (PDF)'; } }
 };
