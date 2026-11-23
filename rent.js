@@ -1,6 +1,7 @@
 /* Rental space page (hall.html / lab.html / lounge.html) – one shared script, driven by window.SPACE_ID */
 const SID = window.SPACE_ID;
 let R = null, S = null, sel = { pkg: null, hours: 2, units: 1, extras: {} }, gi = 0;
+let av = { date: '', keys: [] };   // blocks already taken for the chosen date (this space only)
 let myIds = JSON.parse(localStorage.getItem('mb_rent') || '[]'), myDocs = {};
 const app = $('#app');
 const STB = { pending: ['Pending confirmation', 'b-warn'], confirmed: ['Confirmed', 'b-ok'], cancelled: ['Cancelled', 'b-red'], completed: ['Completed', 'b-gray'] };
@@ -47,6 +48,7 @@ function render() {
     ${S.available ? `<form class="rn-form" id="rf" novalidate>
       <div class="row2"><div class="field"><label>Date <span class="req">*</span></label><input type="date" id="fDate" min="${todayStr()}"/></div>
         <div class="field"><label>Start time <span class="req">*</span></label><select id="fStart">${timeOpts()}</select></div></div>
+      <div id="avail"></div>
       <div id="dyn"></div>
       <div class="row2"><div class="field"><label>Number of guests <span class="req">*</span></label><input type="number" id="fGuests" min="1" ${S.maxGuests ? `max="${S.maxGuests}"` : ''} value="10"/></div>
         ${S.layouts && S.layouts.length ? `<div class="field"><label>Layout</label><select id="fLayout">${S.layouts.map(l => `<option>${esc(l)}</option>`).join('')}</select></div>` : '<div></div>'}</div>
@@ -64,12 +66,38 @@ function render() {
     <div class="rn-contact"><div><small style="opacity:.7;letter-spacing:.1em">WHATSAPP</small><br><b>${esc(R.rental.whatsapp || '')}</b><div style="font-size:13px;margin-top:4px">${esc(R.rental.email || '')}</div></div><div style="text-align:right;font-size:14px"><b style="font-size:15px;color:#ff8a98">${esc(R.rental.address || '')}</b><div style="opacity:.85">${esc(R.rental.hours || '')}</div></div></div></section></div>`;
   $$('#pk .rn-opt').forEach(b => b.onclick = () => { if (!S.available) return; keep(); sel.pkg = b.dataset.pk; const q = S.packages.find(x => x.id === sel.pkg); sel.hours = q.hours || q.minHours || 2; sel.units = 1; paintPk(); dyn(); est(); });
   $$('.rn-gal .th img').forEach(i => i.onclick = () => { gi = +i.dataset.i; $('#gMain').src = S.photos[gi]; $$('.rn-gal .th img').forEach((x, k) => x.classList.toggle('on', k === gi)); });
-  if (S.available) { dyn(); est(); const f = $('#rf'); f.addEventListener('input', est); f.addEventListener('change', est); f.onsubmit = e => { e.preventDefault(); submit(); };
+  if (S.available) { dyn(); est(); $('#fDate').addEventListener('change', refreshAvail); const f = $('#rf'); f.addEventListener('input', est); f.addEventListener('change', est); f.onsubmit = e => { e.preventDefault(); submit(); };
     $$('[data-ex]').forEach(c => c.onchange = () => { const q = $(`[data-exq="${c.dataset.ex}"]`); if (q) q.disabled = !c.checked; est(); });
     const pr = JSON.parse(localStorage.getItem('mb_profile') || '{}'); if (pr.name) $('#fName').value = pr.name; if (pr.email) $('#fEmail').value = pr.email; if (pr.phone) $('#fPhone').value = pr.phone; }
 }
 function paintPk() { $$('#pk .rn-opt').forEach(b => b.classList.toggle('sel', b.dataset.pk === sel.pkg)); }
-function timeOpts() { let o = ''; for (let m = 8 * 60; m <= 20 * 60; m += 30) { const t = pad(Math.floor(m / 60)) + ':' + pad(m % 60); o += `<option value="${t}" ${t === '09:00' ? 'selected' : ''}>${fmtTime(t)}</option>`; } return o; }
+function timeOpts(taken, cur) {   // start times: from the centre's open time to 30 min before closing (admin setting); booked start times are disabled
+  const ch = centreHours(R.rental), tk = taken || [], lo = toMin(ch.open), hi = ch.set ? toMin(ch.close) - 30 : 20 * 60, list = [];
+  for (let m = lo; m <= hi; m += 30) list.push(minStr(m));
+  let pick = list.includes(cur) && !tk.includes(blockKey(toMin(cur))) ? cur : (list.includes('09:00') && !tk.includes('0900') ? '09:00' : (list.find(t => !tk.includes(blockKey(toMin(t)))) || list[0]));
+  return list.map(t => { const bk = tk.includes(blockKey(toMin(t))); return `<option value="${t}" ${t === pick ? 'selected' : ''} ${bk ? 'disabled' : ''}>${fmtTime(t)}${bk ? ' – booked' : ''}</option>`; }).join('');
+}
+const clash = (date, st, end) => !!(date && st && end && av.date === date && blocksOf(st, end).some(k => av.keys.includes(k)));
+const hoursText = ch => fmtTime(ch.open) + ' – ' + fmtTime(ch.close);
+const outOfHours = (ch, st, end) => ch.set && (toMin(st) < toMin(ch.open) || (end ? toMin(end) > toMin(ch.close) : toMin(st) >= toMin(ch.close)));
+/* reads the taken hours of the chosen date and updates the availability panel + start times */
+async function refreshAvail() {
+  const d = $('#fDate'); if (!d) return; const date = d.value;
+  if (!date) { av = { date: '', keys: [] }; paintAvail(); est(); return; }
+  const keys = await loadAvail(SID, date); if ($('#fDate').value !== date) return;
+  av = { date, keys }; paintAvail(); est();
+}
+function paintAvail() {
+  const box = $('#avail'), st = $('#fStart'); if (!box || !st) return;
+  st.innerHTML = timeOpts(av.date ? av.keys : [], st.value);
+  if (!av.date) { box.innerHTML = ''; return; }
+  const ch = centreHours(R.rental), lo = toMin(ch.open), hi = toMin(ch.close), rows = { booked: [], free: [] };
+  for (let m = lo; m < hi; m += 30) { const k = av.keys.includes(blockKey(m)) ? 'booked' : 'free', r = rows[k], last = r[r.length - 1]; if (last && last[1] === m) last[1] = m + 30; else r.push([m, m + 30]); }
+  const chip = (r, c) => `<span class="badge ${c}" style="margin:2px 6px 2px 0">${fmtTime(minStr(r[0]))} – ${fmtTime(minStr(r[1]))}</span>`;
+  box.innerHTML = `<div class="help" style="margin:-4px 0 12px"><b>${esc(S.name)} on ${fmtDate(av.date)}</b> (${hoursText(ch)})<br>`
+    + (rows.free.length ? 'Available: ' + rows.free.map(r => chip(r, 'b-ok')).join('') : '<span style="color:var(--red);font-weight:700">Fully booked for this day – please choose another date.</span>')
+    + (rows.booked.length ? '<br>Already booked: ' + rows.booked.map(r => chip(r, 'b-red')).join('') : '') + '</div>';
+}
 function keep() { const h = $('#fHours'), u = $('#fUnits'); if (h) sel.hours = +h.value || sel.hours; if (u) sel.units = +u.value || 1; }
 function dyn() {
   const p = S.packages.find(x => x.id === sel.pkg), box = $('#dyn'); if (!box || !p) return;
@@ -90,7 +118,10 @@ function est() {
   const box = $('#est'); if (!box) return; const v = vals(); const e = calcEstimate(S, { pkg: sel.pkg, hours: v.hours, units: v.units, extras: v.ex });
   const date = $('#fDate').value, st = $('#fStart').value, end = v.hours ? addMinutes(st, v.hours * 60) : '';
   let warn = ''; if (date) { const dow = parseD(date).getDay(); if (dow === 0 || dow === 6) warn += '<div class="help" style="color:#a86f00">Weekend bookings are on request, subject to availability.</div>'; }
-  if (end && (st < '09:00' || end > '18:00')) warn += '<div class="help" style="color:#a86f00">Our normal hours are 9.00 am to 6.00 pm – other times are on request.</div>';
+  const ch = centreHours(R.rental);
+  if (!ch.set && end && (st < '09:00' || end > '18:00')) warn += '<div class="help" style="color:#a86f00">Our normal hours are 9.00 am to 6.00 pm – other times are on request.</div>';
+  if (outOfHours(ch, st, end)) warn += '<div class="help" style="color:var(--red);font-weight:700">Bookings are only accepted between ' + hoursText(ch) + '. Please choose a time inside our opening hours.</div>';
+  if (clash(date, st, end)) warn += '<div class="help" style="color:var(--red);font-weight:700">Already Booked by Another Person – part of this time is taken. Please see the available times above.</div>';
   box.innerHTML = `<b>Summary</b>${end ? `<div class="l"><span>Time</span><span>${fmtTime(st)} – ${fmtTime(end)}</span></div>` : ''}${e.lines.map(l => `<div class="l"><span>${esc(l[0])}</span><span>${l[1] == null ? 'On request' : rs(l[1])}</span></div>`).join('')}
     <div class="t l"><span>Estimated total</span><span>${e.lines.some(l => l[1] != null) ? rs(e.total) : '—'}${e.quote && e.total ? ' + on request items' : ''}</span></div>${warn}<div class="help">Final price is confirmed by Mentobeam.</div>`;
 }
@@ -100,6 +131,9 @@ function collect() {
   err.textContent = '';
   if (!date || date < todayStr()) { err.textContent = 'Please choose a date (today or later).'; return null; }
   if (v.p.mode !== 'quote' && v.hours <= 0) { err.textContent = 'Please enter the number of hours.'; return null; }
+  const ch = centreHours(R.rental), endT = v.hours ? addMinutes(start, v.hours * 60) : '';
+  if (outOfHours(ch, start, endT)) { err.textContent = 'Bookings are only accepted between ' + hoursText(ch) + '. Please choose a time inside our opening hours.'; return null; }
+  if (clash(date, start, endT)) { err.textContent = 'Already Booked by Another Person'; return null; }
   if (guests < 1 || (S.maxGuests && guests > S.maxGuests)) { err.textContent = 'Guests must be between 1 and ' + (S.maxGuests || 'the venue limit') + '.'; return null; }
   if (name.length < 2) { err.textContent = 'Please enter your name.'; return null; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return null; }
@@ -109,7 +143,7 @@ function collect() {
   return { spaceId: S.id, spaceName: S.name, packageId: v.p.id, packageName: v.p.name, date, startTime: start, endTime: v.hours ? addMinutes(start, v.hours * 60) : '', hours: v.hours, units: v.units, guests,
     layout: ($('#fLayout') || {}).value || '', extras: exList, extrasText: exList.map(x => x.name + (x.qty > 1 ? ' x' + x.qty : '')).join('; '),
     estimate: est2, quoteItems: !!e.quote, advanceDue: advanceOf(est2, pct), advancePct: pct, paidClaim: false,
-    name, email, phone, notes: $('#fNotes').value.trim().slice(0, 600), status: 'pending', createdAt: Date.now() };
+    name, email, phone, notes: $('#fNotes').value.trim().slice(0, 600), status: 'pending', createdAt: Date.now(), blocks: endT ? blocksOf(start, endT) : [] };
 }
 const advPct = () => Number(R.rental.advancePct) || 50;
 const refundDays = () => (R.rental.refundDays === '' || R.rental.refundDays == null) ? 7 : Number(R.rental.refundDays);
@@ -118,6 +152,7 @@ const waNote = id => waLink(R.rental.whatsapp, 'Hi, regarding my ' + S.name + ' 
 
 /* step 1: validated form -> payment step (the booking is only placed after the advance is paid) */
 async function submit() {
+  await refreshAvail();   // always check the latest taken hours first, so nobody pays for a slot that was just taken
   const data = collect(); if (!data) return;
   if (data.advanceDue <= 0) {   // price is "on request" – nothing to pay yet
     if (!await confirmBox('The price for this booking is agreed with us first, so there is no advance to pay right now. We will contact you with the price and payment details.', { okText: 'Send request', title: 'Send booking request?' })) return;
@@ -160,8 +195,11 @@ async function place(data, slip, pm) {
   try {
     const b = db.batch(); b.set(ref, data);
     if (slip) b.set(db.collection('rentSlips').doc(ref.id), { data: slip.data, type: slip.type, name: data.slipName, size: slip.size || 0, at: Date.now(), kind: 'advance' });
+    lockOps(b, data.spaceId, data.date, data.blocks, ref.id, false);   // reserves the hours in the same atomic write - fails if someone else already has any of them
     await b.commit();
-  } catch (x) { err.textContent = 'Sorry, the booking could not be placed. ' + errMsg(x); return false; }
+  } catch (x) {
+    if (data.blocks.length) { const taken = await loadAvail(data.spaceId, data.date); if (data.blocks.some(k => taken.includes(k))) { av = { date: data.date, keys: taken }; paintAvail(); est(); err.textContent = 'Already Booked by Another Person' + (pm ? ' – please press Back and choose a different time.' : ''); return false; } }
+    err.textContent = 'Sorry, the booking could not be placed. ' + errMsg(x); return false; }
   localStorage.setItem('mb_profile', JSON.stringify({ name: data.name, email: data.email, phone: data.phone }));
   if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [ref.id], records: { [ref.id]: flat(data) } });
   myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy();
@@ -171,10 +209,10 @@ async function place(data, slip, pm) {
     <p><b>${esc(S.name)}</b> · ${esc(data.packageName)}<br>${fmtDate(data.date)}${data.endTime ? ' · ' + fmtTime(data.startTime) + ' – ' + fmtTime(data.endTime) : ''}</p><p class="help" style="margin:8px 0">Booking code: <span style="font-family:monospace">${ref.id}</span></p>
     <a class="btn btn-ghost btn-block" target="_blank" rel="noopener" href="${waNote(ref.id)}">Message us on WhatsApp</a><button class="btn btn-blue btn-block" style="margin-top:8px" id="okd">Done</button></div>`);
   m.$('#okd').onclick = () => { m.close(); location.hash = '#my'; };
-  const f = $('#rf'); if (f) { f.reset(); dyn(); est(); }
+  const f = $('#rf'); if (f) { f.reset(); dyn(); av = { date: '', keys: [] }; paintAvail(); est(); }
   return true;
 }
-const flat = d => { const o = Object.assign({}, d); delete o.extras; return o; };
+const flat = d => { const o = Object.assign({}, d); delete o.extras; delete o.blocks; return o; };
 async function loadMy() {
   const miss = myIds.filter(id => !(id in myDocs));
   await Promise.all(miss.map(async id => { try { const s = await db.collection('rentBookings').doc(id).get(); myDocs[id] = s.exists ? { id, ...s.data() } : null; } catch (e) { myDocs[id] = undefined; } }));
@@ -239,7 +277,7 @@ async function cancelMy(id) {
   const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && refundWithin(b, refundDays());
   if (refundable) return refundForm(b, true);
   const ok = await confirmBox(paid ? 'This booking is outside the refund period (refunds are only available if the booking was confirmed within ' + refundDays() + ' day(s) of being made and is cancelled within ' + refundDays() + ' day(s) of us confirming it), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
-  try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }; await db.collection('rentBookings').doc(id).update(up); Object.assign(b, up); renderMy(); toast('Booking cancelled', 'ok');
+  try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }, bt = db.batch(); bt.update(db.collection('rentBookings').doc(id), up); lockOps(bt, b.spaceId, b.date, b.blocks, id, true); await bt.commit(); Object.assign(b, up); renderMy(); refreshAvail(); toast('Booking cancelled', 'ok');
     if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
 }
@@ -261,7 +299,7 @@ function refundForm(b, cancelNow) {
     const up = { refundStatus: 'requested', refundBank: bank, refundAccName: nm.slice(0, 100), refundAccNo: no, refundWhatsapp: wa, refundNote: m.$('#rfNote').value.trim().slice(0, 300), refundAmount: amt, refundRequestedAt: Date.now() };
     if (cancelNow) Object.assign(up, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' });
     const btn = m.$('#rfGo'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
-    try { await db.collection('rentBookings').doc(b.id).update(up); Object.assign(b, up); m.close(); renderMy();
+    try { const bt = db.batch(); bt.update(db.collection('rentBookings').doc(b.id), up); if (cancelNow) lockOps(bt, b.spaceId, b.date, b.blocks, b.id, true); await bt.commit(); Object.assign(b, up); m.close(); renderMy(); refreshAvail();
       const m2 = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund requested</h2><p class="msub">${cancelNow ? 'Your booking is cancelled. ' : ''}Your refund of <b>${rs(amt)}</b> will be paid within <b>${hrs} hours</b>. We will send a confirmation to your WhatsApp (${esc(wa)}) once it is done.</p><button class="btn btn-blue btn-block" id="okr">OK</button></div>`); m2.$('#okr').onclick = m2.close;
       if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [b.id], records: { [b.id]: flat(b) } });
     } catch (e) { er.textContent = errMsg(e); btn.disabled = false; btn.textContent = cancelNow ? 'Cancel booking & request refund' : 'Send refund request'; }
