@@ -175,6 +175,9 @@ function rTermsHTML() {
   return `<div class="card box"><h3>Terms shown under the cards</h3><p class="help" style="margin-bottom:10px">These appear on the main page (under the cards) and on every rental page. One line per item.</p>
     ${f('rtTerms', 'Booking terms (one per line)', (r.terms && r.terms.length ? r.terms : DEF_TERMS).join('\n'), 150)}${f('rtIncl', 'Included with every booking (one per line)', (r.included || []).join('\n'), 110)}${f('rtIntro', 'Intro line (main page)', r.intro || '')}
     <div class="row2">${f('rtWa', 'WhatsApp number', r.whatsapp || '')}${f('rtMail', 'Email', r.email || '')}</div><div class="row2">${f('rtWeb', 'Website', r.web || '')}${f('rtHours', 'Opening hours', r.hours || '')}</div>${f('rtAddr', 'Address', r.address || '')}
+    <h3 style="margin-top:18px">Centre open &amp; close times</h3><p class="help" style="margin-bottom:10px">Customers can only book inside these times, and each space can be booked hour by hour (booked hours are blocked for other customers, free hours stay open). Leave both empty for no limit. Use 30-minute steps (e.g. 08:00 – 17:00).</p>
+    <div class="row2"><div class="field"><label>Open time</label><input id="rtOpen" type="time" step="1800" value="${esc(r.openTime || '')}"/></div><div class="field"><label>Close time</label><input id="rtClose" type="time" step="1800" value="${esc(r.closeTime || '')}"/></div></div>
+    <button class="btn btn-ghost btn-sm" data-act="rentSyncLocks" style="margin-bottom:6px">🔄 Sync hour availability from existing bookings</button><p class="help" style="margin-bottom:10px">Run once after updating, so bookings made earlier also block their hours. Safe to run again any time.</p>
     <h3 style="margin-top:18px">Advance payment & refunds</h3><p class="help" style="margin-bottom:10px">Customers see the bank details after pressing “Book”; the booking is placed only after they pay the advance and press “I made the advance payment”.</p>
     <div class="row2">${f('rtBank', 'Bank name', r.bankName || '')}${f('rtBranch', 'Branch', r.bankBranch || '')}</div><div class="row2">${f('rtAccName', 'Account name', r.bankAccName || '')}${f('rtAccNo', 'Account number', r.bankAccNo || '')}</div>
     ${f('rtPayNote', 'Payment note (optional)', r.payNote || '')}<div class="row2">${f('rtAdv', 'Advance %', r.advancePct != null ? r.advancePct : 50)}${f('rtRefDays', 'Refund period (days): booking must be confirmed, and then cancelled, within this many days', r.refundDays != null && r.refundDays !== '' ? r.refundDays : 7)}</div>${f('rtRefHrs', 'Refund paid within (hours) – shown to customers', r.refundHours != null ? r.refundHours : 48)}
@@ -254,8 +257,10 @@ A.edSave = (d, btn) => run(btn, async () => {
   const nm = s.name; ed.m.close(); toast(nm + ' saved', 'ok'); sheetRentSpaces(nm + ': details / rates updated');
 });
 A.rentSaveTerms = (d, btn) => run(btn, async () => {
-  const v = id => $('#' + id).value;
-  await db.collection('settings').doc('rental').set({ terms: lines(v('rtTerms')), included: lines(v('rtIncl')), intro: v('rtIntro').trim(), whatsapp: v('rtWa').trim(), email: v('rtMail').trim(), web: v('rtWeb').trim(), hours: v('rtHours').trim(), address: v('rtAddr').trim(),
+  const v = id => $('#' + id).value, oT = v('rtOpen').trim(), cT = v('rtClose').trim();
+  if (!!oT !== !!cT) throw new Error('Please set both the open time and the close time (or leave both empty).');
+  if (oT && (toMin(cT) <= toMin(oT) || toMin(oT) % 30 || toMin(cT) % 30)) throw new Error('Close time must be after the open time, and both must be on the hour or half hour.');
+  await db.collection('settings').doc('rental').set({ openTime: oT, closeTime: cT, terms: lines(v('rtTerms')), included: lines(v('rtIncl')), intro: v('rtIntro').trim(), whatsapp: v('rtWa').trim(), email: v('rtMail').trim(), web: v('rtWeb').trim(), hours: v('rtHours').trim(), address: v('rtAddr').trim(),
     bankName: v('rtBank').trim(), bankBranch: v('rtBranch').trim(), bankAccName: v('rtAccName').trim(), bankAccNo: v('rtAccNo').trim(), payNote: v('rtPayNote').trim(),
     advancePct: Math.min(100, Math.max(1, Number(v('rtAdv')) || 50)), refundDays: Math.max(0, Number(v('rtRefDays')) || 0), refundHours: Math.max(1, Number(v('rtRefHrs')) || 48), updatedAt: Date.now() }, { merge: true });
   toast('Saved', 'ok'); sheetRentSpaces('Terms & contact updated');
@@ -264,7 +269,12 @@ async function rSetStatus(id, status, extra) {
   const bk = rentBookings.find(x => x.id === id), sy = bk ? rSys(bk) : null, up = Object.assign({ status, statusAt: Date.now() }, extra || {});
   if (status === 'confirmed' && bk && !bk.confirmedAt) up.confirmedAt = up.statusAt;   // refund window starts here and is fixed even if the status later changes
   if (sy !== null && bk && bk.estimate !== sy && up.totalFinal == null) { up.estimateCustomer = bk.estimate || 0; up.estimate = sy; }   // keep the system price, remember what the browser sent
-  await db.collection('rentBookings').doc(id).update(up); sheetRent([id]);
+  const ks = (bk && bk.blocks) || [], wasOff = !!bk && bk.status === 'cancelled', goOff = status === 'cancelled';
+  if (ks.length && wasOff !== goOff) {   // a cancelled booking frees its hours; bringing it back takes them again (unless someone else booked them meanwhile)
+    if (!goOff) { const taken = await loadAvail(bk.spaceId, bk.date); if (ks.some(k => taken.includes(k))) throw new Error('Already Booked by Another Person – these hours were booked after this booking was cancelled, so it cannot be restored.'); }
+    const bt = db.batch(); bt.update(db.collection('rentBookings').doc(id), up); lockOps(bt, bk.spaceId, bk.date, ks, id, goOff); await bt.commit();
+  } else await db.collection('rentBookings').doc(id).update(up);
+  sheetRent([id]);
 }
 C.rentStatus = el => {
   const b = rentBookings.find(x => x.id === el.dataset.id), v = el.value;
@@ -323,8 +333,23 @@ A.rentSlip = d => run(null, async () => {
 A.rentDel = async d => {
   const b = rentBookings.find(x => x.id === d.id); if (!b) return;
   if (!await confirmBox('Delete the booking of <b>' + esc(b.name) + '</b>? (It stays in the Google Sheet, marked Cancelled.)', { okText: 'Delete', danger: true, title: 'Delete booking?' })) return;
-  run(null, async () => { await db.collection('rentSlips').doc(d.id).delete(); await db.collection('rentSlips').doc(d.id + '_bal').delete(); await db.collection('rentBookings').doc(d.id).delete(); toast('Deleted', 'ok'); sheetRent([d.id]); });
+  run(null, async () => { if (b.status !== 'cancelled' && (b.blocks || []).length) { const bt = db.batch(); lockOps(bt, b.spaceId, b.date, b.blocks, b.id, true); await bt.commit(); }
+    await db.collection('rentSlips').doc(d.id).delete(); await db.collection('rentSlips').doc(d.id + '_bal').delete(); await db.collection('rentBookings').doc(d.id).delete(); toast('Deleted', 'ok'); sheetRent([d.id]); });
 };
+/* rebuilds the hour availability of all upcoming days from the bookings (also covers bookings made before this feature existed) */
+A.rentSyncLocks = (d, btn) => run(btn, async () => {
+  const today = todayStr(), groups = {}, ops = [];
+  rentBookings.forEach(b => {
+    if (b.status === 'cancelled' || !b.endTime || !b.date || b.date < today) return;
+    const ks = blocksOf(b.startTime, b.endTime), id = availId(b.spaceId, b.date); if (!ks.length) return;
+    const g = groups[id] || (groups[id] = {}); ks.forEach(k => { g[k] = true; });
+    if (JSON.stringify(b.blocks || []) !== JSON.stringify(ks)) ops.push({ t: 'upd', ref: db.collection('rentBookings').doc(b.id), data: { blocks: ks } });
+  });
+  const old = await db.collection('rentLocks').get();
+  old.forEach(x => { if (!groups[x.id] && x.id.slice(-10) >= today && Object.keys(x.data().blocks || {}).length) groups[x.id] = {}; });   // stale locks of cancelled / deleted bookings
+  Object.keys(groups).forEach(id => { ops.push({ t: 'set', ref: db.collection('rentLocks').doc(id), data: { blocks: groups[id], last: '' } }); ops.push({ t: 'set', ref: db.collection('rentAvail').doc(id), data: { blocks: groups[id] } }); });
+  await commitOps(ops); toast('Hour availability updated (' + Object.keys(groups).length + ' day/space records)', 'ok');
+});
 A.rentSeed = (d, btn) => run(btn, async () => {
   for (const sp of rMerged()) { if (rDoc(sp.id)) continue; const o = JSON.parse(JSON.stringify(sp)); delete o.photos; o.updatedAt = Date.now(); await db.collection('spaces').doc(sp.id).set(o); }
   toast('Saved', 'ok'); sheetRentSpaces('Initial rates saved from the brochure');
