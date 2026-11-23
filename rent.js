@@ -83,9 +83,16 @@ const outOfHours = (ch, st, end) => ch.set && (toMin(st) < toMin(ch.open) || (en
 /* reads the taken hours of the chosen date and updates the availability panel + start times */
 async function refreshAvail() {
   const d = $('#fDate'); if (!d) return; const date = d.value;
-  if (!date) { av = { date: '', keys: [] }; paintAvail(); est(); return; }
+  if (!date) { av = { date: '', keys: [] }; watchAvail(''); paintAvail(); est(); return; }
   const keys = await loadAvail(SID, date); if ($('#fDate').value !== date) return;
-  av = { date, keys }; paintAvail(); est();
+  av = { date, keys }; paintAvail(); est(); watchAvail(date);
+}
+/* the taken hours of the chosen date update LIVE while the customer is on the page (someone else books / cancels -> the times change at once) */
+let availOff = null, availFor = '';
+function watchAvail(date) {
+  if (availFor === date) return; if (availOff) { availOff(); availOff = null; } availFor = date; if (!date) return;
+  availOff = db.collection('rentAvail').doc(availId(SID, date)).onSnapshot(s => { if ($('#fDate') && $('#fDate').value !== date) return;
+    av = { date, keys: s.exists ? Object.keys(s.data().blocks || {}) : [] }; paintAvail(); est(); }, () => { /* keep the last known hours */ });
 }
 function paintAvail() {
   const box = $('#avail'), st = $('#fStart'); if (!box || !st) return;
@@ -183,7 +190,7 @@ function payStep(data) {
     catch (x) { er.textContent = errMsg(x); e.target.value = ''; }
   };
   m.$('#payBtn').onclick = async () => {
-    if (!slip && !await confirmBox('You have not attached the payment slip. You can attach it later from “My bookings”, but we cannot confirm your booking until we receive it. Place the booking now?', { okText: 'Place booking', title: 'No slip attached' })) return;
+    if (!slip && !await confirmBox('You have not attached the payment slip. You can attach it later from “My bookings”, but we cannot confirm your booking until we receive it. Without a slip, a refund cannot be processed if you cancel. Place the booking now?', { okText: 'Place booking', title: 'No slip attached' })) return;
     const b = m.$('#payBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Placing booking...';
     const ok = await place(data, slip, m); if (!ok) { b.disabled = false; b.textContent = 'I made the advance payment'; }
   };
@@ -202,7 +209,7 @@ async function place(data, slip, pm) {
     err.textContent = 'Sorry, the booking could not be placed. ' + errMsg(x); return false; }
   localStorage.setItem('mb_profile', JSON.stringify({ name: data.name, email: data.email, phone: data.phone }));
   if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [ref.id], records: { [ref.id]: flat(data) } });
-  myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy();
+  myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy(); watchMy(ref.id);
   if (pm) pm.close();
   const m = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Booking request placed!</h2>
     <p class="msub">Thank you, ${esc(data.name.split(' ')[0])}. ${data.advanceDue > 0 ? (slip ? 'We received your payment slip and will verify it and confirm your booking.' : 'Please attach your payment slip from “My bookings” so we can verify your payment and confirm.') : 'We will contact you with the price and payment details.'}</p>
@@ -213,11 +220,14 @@ async function place(data, slip, pm) {
   return true;
 }
 const flat = d => { const o = Object.assign({}, d); delete o.extras; delete o.blocks; return o; };
-async function loadMy() {
-  const miss = myIds.filter(id => !(id in myDocs));
-  await Promise.all(miss.map(async id => { try { const s = await db.collection('rentBookings').doc(id).get(); myDocs[id] = s.exists ? { id, ...s.data() } : null; } catch (e) { myDocs[id] = undefined; } }));
-  renderMy();
+/* "My bookings" is LIVE: every booking is watched, so confirmations, slip checks, cancellations and refund updates by the admin appear instantly (no reload) */
+const myWatch = {};
+function watchMy(id) {
+  if (myWatch[id]) return;
+  myWatch[id] = db.collection('rentBookings').doc(id).onSnapshot(s => { if (s.metadata.hasPendingWrites && myDocs[id]) return; myDocs[id] = s.exists ? { id, ...s.data() } : null; renderMy(); },
+    e => { myDocs[id] = myDocs[id] || undefined; renderMy(); });
 }
+function loadMy() { myIds.forEach(watchMy); renderMy(); }
 function payLine(b) {
   const pi = payInfo(b); let h = '';
   if (pi.total > 0 && b.status !== 'cancelled') {
@@ -226,6 +236,7 @@ function payLine(b) {
     if (!pi.advPaid && pi.advance > 0 && !b.slipAt) h += `<div class="rn-remind">⚠ Please attach your bank slip so we can verify your advance payment and confirm your booking. <button class="btn btn-primary btn-sm" data-sl="${b.id}">Attach advance slip</button></div>`;
     if ((pi.advPaid || pi.advance === 0) && !pi.balPaid && pi.balance > 0 && !b.balanceSlipAt && b.status === 'confirmed') h += `<div class="rn-remind">Pay the balance <b>${rs(pi.balance)}</b> by bank transfer on or before your booking date, then attach the slip. <button class="btn btn-primary btn-sm" data-bal="${b.id}">Pay balance / attach slip</button></div>`;
   }
+  if (b.status === 'cancelled' && b.cancelledBy === 'customer' && b.cancelSlip === false && Number(b.advanceDue) > 0) h += `<div class="rn-pl"><span class="badge b-red">Cancelled without payment slip</span> No refund can be processed because no slip was attached.</div>`;
   if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours. We will message you on WhatsApp.</div>`;
   if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0))} – please check your bank account.</div>`;
   if (b.refundStatus === 'rejected') h += `<div class="rn-pl"><span class="badge b-red">Refund not approved</span> ${esc(b.refundRejectReason || '')}</div>`;
@@ -274,12 +285,32 @@ function balanceStep(id) {
 }
 async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
+  const owes = Number(b.advanceDue) > 0, hasSlip = !!(b.paidClaim || b.advanceVerified);   // hasSlip = proof of payment is on file (the database rules check this too)
   const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && refundWithin(b, refundDays());
   if (refundable) return refundForm(b, true);
+  if (owes && !hasSlip) return cancelNoSlip(b);   // advance is due but no slip was ever attached: warn first, record the choice
   const ok = await confirmBox(paid ? 'This booking is outside the refund period (refunds are only available if the booking was confirmed within ' + refundDays() + ' day(s) of being made and is cancelled within ' + refundDays() + ' day(s) of us confirming it), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
-  try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }, bt = db.batch(); bt.update(db.collection('rentBookings').doc(id), up); lockOps(bt, b.spaceId, b.date, b.blocks, id, true); await bt.commit(); Object.assign(b, up); renderMy(); refreshAvail(); toast('Booking cancelled', 'ok');
-    if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
+  doCancel(b, hasSlip, false);
+}
+async function doCancel(b, hasSlip, ack) {
+  try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer', cancelSlip: !!hasSlip }; if (ack) up.cancelAck = true;
+    const bt = db.batch(); bt.update(db.collection('rentBookings').doc(b.id), up); lockOps(bt, b.spaceId, b.date, b.blocks, b.id, true); await bt.commit(); Object.assign(b, up); renderMy(); refreshAvail(); toast('Booking cancelled', 'ok');
+    if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [b.id], records: { [b.id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
+}
+/* cancelling while the advance is due but NO slip is attached: the customer must read the warning and accept it (stored on the booking as proof for the admin) */
+function cancelNoSlip(b) {
+  const m = modal(`<h2 class="mh" style="padding:0">⚠ No payment slip attached</h2>
+    <p class="msub">Your booking needs an advance of <b>${rs(b.advanceDue)}</b>, but no payment slip has been attached to it.</p>
+    <div class="rn-remind" style="margin:12px 0"><b>If you have already paid by bank transfer, attach your slip first.</b> A refund can only be requested for a booking that has a slip. If you cancel <u>without</u> a slip, we cannot verify your payment, <b>no refund request can be made</b>, and any money you have already transferred is <b>your responsibility</b> – Mentobeam cannot be held responsible for it and is not required to warn you again. This cannot be undone.</div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-bottom:12px"><input type="checkbox" id="nsAck" style="margin-top:3px"/> <span>I understand. I am cancelling <b>without a payment slip</b> and accept that no refund can be processed.</span></label>
+    <button class="btn btn-primary btn-block btn-lg" id="nsAttach" type="button">Attach my slip now</button>
+    <button class="btn btn-danger btn-block" id="nsGo" type="button" style="margin-top:8px" disabled>Cancel booking without slip</button>
+    <button class="btn btn-ghost btn-block" id="nsBack" type="button" style="margin-top:8px">Keep my booking</button>`);
+  const go = m.$('#nsGo'); m.$('#nsAck').onchange = e => { go.disabled = !e.target.checked; };
+  m.$('#nsBack').onclick = () => m.close();
+  m.$('#nsAttach').onclick = () => { m.close(); attachSlip(b.id, 'advance'); };
+  go.onclick = async () => { if (!m.$('#nsAck').checked) return; go.disabled = true; m.close(); await doCancel(b, false, true); };
 }
 /* "Request to refund" form. cancelNow = cancel the booking in the same step (customer cancelling); false = booking was already cancelled by the organiser */
 function refundForm(b, cancelNow) {
@@ -297,7 +328,7 @@ function refundForm(b, cancelNow) {
     if (!bank) { er.textContent = 'Please select your bank.'; return; } if (nm.length < 2) { er.textContent = 'Please enter the account name.'; return; }
     if (!/^\d{6,20}$/.test(no)) { er.textContent = 'Please enter a valid account number (digits only).'; return; } if (!/^\d{9,15}$/.test(wa)) { er.textContent = 'Please enter a valid WhatsApp number.'; return; }
     const up = { refundStatus: 'requested', refundBank: bank, refundAccName: nm.slice(0, 100), refundAccNo: no, refundWhatsapp: wa, refundNote: m.$('#rfNote').value.trim().slice(0, 300), refundAmount: amt, refundRequestedAt: Date.now() };
-    if (cancelNow) Object.assign(up, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' });
+    if (cancelNow) Object.assign(up, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer', cancelSlip: true });   // a refund request is only possible with a slip on file
     const btn = m.$('#rfGo'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
     try { const bt = db.batch(); bt.update(db.collection('rentBookings').doc(b.id), up); if (cancelNow) lockOps(bt, b.spaceId, b.date, b.blocks, b.id, true); await bt.commit(); Object.assign(b, up); m.close(); renderMy(); refreshAvail();
       const m2 = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund requested</h2><p class="msub">${cancelNow ? 'Your booking is cancelled. ' : ''}Your refund of <b>${rs(amt)}</b> will be paid within <b>${hrs} hours</b>. We will send a confirmation to your WhatsApp (${esc(wa)}) once it is done.</p><button class="btn btn-blue btn-block" id="okr">OK</button></div>`); m2.$('#okr').onclick = m2.close;
