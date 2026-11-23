@@ -1,6 +1,6 @@
 /* Admin → Rentals module. Loaded AFTER the main admin script (adds a new "Rentals" page, permission, sync + storage hooks). */
 var rentBookings = [], rentSpaces = [], rentalCfg = {}, rentFirst = true, rentHealed = false;
-var rentTab = 'spaces', rbF = { space: '', status: '', month: '', q: '' }, ed = null;
+var rentTab = 'spaces', rbF = { space: '', status: '', month: '', q: '', sort: 'old' }, ed = null;
 PERMS.rentals = 'Rentals (spaces, rates, bookings)'; ALLPERMS.rentals = true;
 NAV.splice(NAV.findIndex(n => n.id === 'content'), 0, { id: 'rentals', icon: '🏛️', label: 'Rentals', perm: 'rentals' });
 
@@ -162,14 +162,16 @@ function rOverlap(b) {
   if (b.status === 'cancelled' || !b.endTime) return false;
   return rentBookings.some(o => o.id !== b.id && o.spaceId === b.spaceId && o.date === b.date && o.status !== 'cancelled' && o.endTime && b.startTime < o.endTime && o.startTime < b.endTime);
 }
-/* the bookings the admin sees: NEW bookings first, oldest last (by the time the booking was made) */
+/* the bookings the admin sees: OLD bookings first, newest last (by the time the booking was made) */
 const rbList = () => {
   let l = rentBookings.slice(); if (rbF.space) l = l.filter(b => b.spaceId === rbF.space); if (rbF.status) l = l.filter(b => b.status === rbF.status); if (rbF.month) l = l.filter(b => (b.date || '').startsWith(rbF.month));
   const q = (rbF.q || '').trim().toLowerCase();
   if (q) { const dq = q.replace(/[\s-]/g, ''); l = l.filter(b => [b.name, b.phone, b.email, b.id, b.spaceName, b.packageName, b.status, b.date, b.notes, b.extrasText, b.refundStatus ? 'refund ' + b.refundStatus : '',
     b.status === 'cancelled' ? (rHadSlip(b) ? 'cancelled with slip' : 'cancelled without slip') : ''].some(v => String(v || '').toLowerCase().includes(q)) || (dq && String(b.phone || '').replace(/[\s-]/g, '').includes(dq))); }
-  return l.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || (b.date + b.startTime).localeCompare(a.date + a.startTime));
+  const dir = rbF.sort === 'new' ? -1 : 1;   // 'old' = oldest first (default), 'new' = latest first
+  return l.sort((a, b) => dir * ((a.createdAt || 0) - (b.createdAt || 0) || (a.date + a.startTime).localeCompare(b.date + b.startTime)));
 };
+const rbOrderLabel = () => rbF.sort === 'new' ? 'latest first' : 'oldest first';
 function rBookingRows(l) {
   return l.length ? `<div class="tw"><table><thead><tr><th>When</th><th>Space / package</th><th>Customer</th><th>Details</th><th>Estimate</th><th>Payment</th><th>Status</th><th></th></tr></thead><tbody>${l.map(b => `<tr>
       <td><b>${fmtDate(b.date, true)}</b><br><span class="muted">${b.endTime ? fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : fmtTime(b.startTime)}</span>${b.createdAt ? '<br><span class="muted" style="font-size:11.5px">Booked ' + fWhen(b.createdAt) + '</span>' : ''}${rOverlap(b) ? '<br><span class="badge b-red">⚠ overlaps another booking</span>' : ''}</td>
@@ -184,7 +186,7 @@ function rBookingRows(l) {
 function rBookingsHTML() {
   const l = rbList();
   const sel = (k, opts, v) => `<select data-chg="rentFilter" data-k="${k}" style="max-width:190px"><option value="">${k === 'space' ? 'All spaces' : k === 'status' ? 'All statuses' : 'All months'}</option>${opts.map(([a, b]) => `<option value="${a}" ${v === a ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>`;
-  return `<div class="card box"><div class="fr" style="gap:10px;flex-wrap:wrap;margin-bottom:12px"><input id="rbQ" data-inp="rbQ" type="search" placeholder="🔍 Search name, phone, email, booking code, space…" value="${esc(rbF.q || '')}" style="min-width:260px;flex:1;max-width:380px"/>${sel('space', DEF_SPACES.map(s => [s.id, s.name]), rbF.space)}${sel('status', ['pending', 'confirmed', 'completed', 'cancelled'].map(x => [x, x]), rbF.status)}${sel('month', rMonths().map(m => [m, monthLabel(m)]), rbF.month)}<span class="muted" id="rbCount">${l.length} booking(s) · newest first</span></div>
+  return `<div class="card box"><div class="fr" style="gap:10px;flex-wrap:wrap;margin-bottom:12px"><input id="rbQ" data-inp="rbQ" type="search" placeholder="🔍 Search name, phone, email, booking code, space…" value="${esc(rbF.q || '')}" style="min-width:260px;flex:1;max-width:380px"/>${sel('space', DEF_SPACES.map(s => [s.id, s.name]), rbF.space)}${sel('status', ['pending', 'confirmed', 'completed', 'cancelled'].map(x => [x, x]), rbF.status)}${sel('month', rMonths().map(m => [m, monthLabel(m)]), rbF.month)}<select data-chg="rentFilter" data-k="sort" style="max-width:170px"><option value="old" ${rbF.sort !== 'new' ? 'selected' : ''}>Oldest first</option><option value="new" ${rbF.sort === 'new' ? 'selected' : ''}>Latest first</option></select><span class="muted" id="rbCount">${l.length} booking(s) · ${rbOrderLabel()}</span></div>
     <div id="rbRows">${rBookingRows(l)}</div>
     <p class="help" style="margin-top:10px">Status changes and new requests are saved to the Google Sheet automatically (one tab per space). Deleting a booking here never deletes it from the sheet.</p></div>`;
 }
@@ -249,7 +251,7 @@ function edRead() {   // copy what is typed in the editor back into ed.sp
     if (per === 'hour') { x.qtyLabel = 'Extra hours'; x.max = 12; } if (per === 'unit_hour') { x.qtyLabel = old.qtyLabel || 'Units'; x.max = old.max || s.maxGuests || 8; } return x; });
 }
 A.rentTab = d => { rentTab = d.t; views.rentals.paint(); };
-I.rbQ = el => { rbF.q = el.value; const l = rbList(), r = $('#rbRows'), c = $('#rbCount'); if (r) r.innerHTML = rBookingRows(l); if (c) c.textContent = l.length + ' booking(s) · newest first'; };
+I.rbQ = el => { rbF.q = el.value; const l = rbList(), r = $('#rbRows'), c = $('#rbCount'); if (r) r.innerHTML = rBookingRows(l); if (c) c.textContent = l.length + ' booking(s) · ' + rbOrderLabel(); };
 C.rentFilter = el => { rbF[el.dataset.k] = el.value; views.rentals.paint(); };
 A.rentToggle = d => run(null, async () => {
   const s = rMerged().find(x => x.id === d.id), on = !s.available, o = JSON.parse(JSON.stringify(s)); o.available = on; o.updatedAt = Date.now();
