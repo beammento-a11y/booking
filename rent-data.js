@@ -166,3 +166,27 @@ function payInfo(b) {
 }
 const refundBase = b => Number(b.advanceReceived != null ? b.advanceReceived : b.advanceDue) || 0;
 const waDigits = v => { let n = String(v || '').replace(/\D/g, ''); if (n.startsWith('0')) n = '94' + n.slice(1); return n; };
+
+/* ---------- centre opening hours + hour-by-hour availability of every space ----------
+   Time is split into 30-minute blocks ('0800' = 8:00-8:30). Each space has its own blocks per day, stored in 2 documents that are written in the SAME
+   atomic batch as the booking (so two people can never both get the same block, even at the same instant):
+     rentAvail/{space}_{date}  - public: which blocks are taken (no personal data)       rentLocks/{space}_{date} - admin only: used by the security rules   */
+const toMin = t => { const p = String(t || '0:0').split(':'); return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0); };
+const minStr = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+// open/close set by the admin (Admin -> Rentals -> Terms & contact). If they are not set, no limit is enforced (old behaviour).
+const centreHours = cfg => { const o = cfg && cfg.openTime, c = cfg && cfg.closeTime; return (o && c && toMin(c) > toMin(o)) ? { open: o, close: c, set: true } : { open: '08:00', close: '20:00', set: false }; };
+const blockKey = m => minStr(m).replace(':', '');
+const keyMin = k => Number(k.slice(0, 2)) * 60 + Number(k.slice(2));
+function blocksOf(start, end) { const out = []; if (!start || !end) return out; for (let m = Math.floor(toMin(start) / 30) * 30; m < toMin(end); m += 30) out.push(blockKey(m)); return out; }
+const availId = (spaceId, date) => spaceId + '_' + date;
+/* blocks already taken for one space on one date */
+async function loadAvail(spaceId, date) {
+  try { const s = await db.collection('rentAvail').doc(availId(spaceId, date)).get(); return s.exists ? Object.keys(s.data().blocks || {}) : []; } catch (e) { return []; }
+}
+/* adds (free=false) or frees (free=true) the blocks of one booking inside a write batch */
+function lockOps(batch, spaceId, date, keys, bookingId, free) {
+  if (!keys || !keys.length) return;
+  const id = availId(spaceId, date), mk = () => { const o = {}; keys.forEach(k => { o[k] = free ? firebase.firestore.FieldValue.delete() : true; }); return o; };
+  batch.set(db.collection('rentLocks').doc(id), { blocks: mk(), last: bookingId }, { merge: true });
+  batch.set(db.collection('rentAvail').doc(id), { blocks: mk() }, { merge: true });
+}
