@@ -198,7 +198,7 @@ function renderMy() {
   const list = myIds.map(id => myDocs[id]).filter(b => b && b.spaceId === SID).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
   $('#my').hidden = !list.length; if (!list.length) return;
   $('#myList').innerHTML = list.map(b => {
-    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && adminPaid(b) && refundBase(b) > 0 && daysUntil(b.date) >= refundDays();
+    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && adminPaid(b) && refundBase(b) > 0 && refundWithin(b, refundDays());
     const askRefund = b.status === 'cancelled' && b.cancelledBy === 'admin' && !b.refundStatus && adminPaid(b) && refundBase(b) > 0;
     return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
     <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}${askRefund ? `<br><button class="btn btn-primary btn-sm" style="margin-top:8px" data-rf="${b.id}">Request to refund</button>` : ''}</div></div>`; }).join('');
@@ -236,9 +236,9 @@ function balanceStep(id) {
 }
 async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
-  const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && daysUntil(b.date) >= refundDays();
+  const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && refundWithin(b, refundDays());
   if (refundable) return refundForm(b, true);
-  const ok = await confirmBox(paid ? 'This booking is inside the no-refund period (cancel ' + refundDays() + ' or more days ahead for a refund), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
+  const ok = await confirmBox(paid ? 'This booking is outside the refund period (refunds are only available within ' + refundDays() + ' day(s) of us confirming the booking), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
   try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }; await db.collection('rentBookings').doc(id).update(up); Object.assign(b, up); renderMy(); toast('Booking cancelled', 'ok');
     if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
