@@ -24,28 +24,40 @@ function rRefundWithin(b) {   // was the cancellation made inside the refund per
 }
 // the browser type of a slip is forced from an allow-list (never trusted from the file) so a fake slip can never run as a web page
 const rSlipBlob = async sl => { const raw = await (await fetch(sl.data)).blob(); return new Blob([raw], { type: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(sl.type) ? sl.type : 'application/octet-stream' }); };
-async function rDownloadSlip(b, sl) {
+async function rDownloadSlip(b, sl, tag) {
   const blob = await rSlipBlob(sl), ext = sl.type === 'application/pdf' ? 'pdf' : (sl.type === 'image/png' ? 'png' : 'jpg');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'slip_' + String(b.name || 'customer').replace(/[^a-z0-9]+/gi, '_').slice(0, 30) + '_' + b.date + '_' + b.id.slice(0, 6) + '.' + ext;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'slip_' + (tag || 'advance') + '_' + String(b.name || 'customer').replace(/[^a-z0-9]+/gi, '_').slice(0, 30) + '_' + b.date + '_' + String(b.id).slice(0, 6) + '.' + ext;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+const rSlipId = (b, kind) => kind === 'balance' ? b.id + '_bal' : b.id;
 // download the slip to this device, THEN delete it from the database (frees the space). Nothing is deleted if the download fails.
-async function rTakeSlip(b) {
-  const ref = db.collection('rentSlips').doc(b.id), snap = await ref.get(); if (!snap.exists) return false;
-  await rDownloadSlip(b, snap.data()); await new Promise(r => setTimeout(r, 800)); await ref.delete(); return true;
+async function rTakeSlip(b, kind) {
+  const ref = db.collection('rentSlips').doc(rSlipId(b, kind)), snap = await ref.get(); if (!snap.exists) return false;
+  await rDownloadSlip(b, snap.data(), kind === 'balance' ? 'balance' : 'advance'); await new Promise(r => setTimeout(r, 800)); await ref.delete(); return true;
 }
+const rWaTo = (b, text) => waLink(b.phone, text);
 function rPayCell(b) {
-  let h = '';
-  if (b.advanceDue > 0) {
-    const sy = rSys(b), exp = sy ? advanceOf(sy, b.advancePct || 50) : null;
-    h += `<div style="font-size:12.5px">Advance <b>${rs(b.advanceDue)}</b> (${b.advancePct || 50}%)${exp != null && exp !== b.advanceDue ? ` <span class="badge b-red" title="Advance recalculated from the current rates">⚠ should be ${rs(exp)}</span>` : ''}</div>`;
-    if (b.advanceVerified) h += '<span class="badge b-ok">✓ Verified – slip saved &amp; deleted</span>';
-    else if (b.slipAt) h += `<span class="badge b-blue">Slip received</span><div class="acts" style="margin-top:6px"><button class="btn btn-ghost btn-sm" data-act="rentSlip" data-id="${b.id}">👁 View slip</button>${b.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-act="rentConfirm" data-id="${b.id}">✔ Confirm booking</button>` : ''}</div>`;
-    else if (b.status === 'pending') h += `<span class="badge b-warn">No slip yet</span><div style="margin-top:6px"><a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${waLink(b.phone, 'Hi ' + b.name + ', this is Mentobeam. To verify your advance payment (' + rs(b.advanceDue) + ') for ' + b.spaceName + ' on ' + fmtDate(b.date) + ', please attach your bank transfer slip: open ' + rSiteBase() + b.spaceId + '.html > My bookings > Attach slip. Booking code: ' + b.id)}">🔔 Remind to attach slip</a></div>`;
-  } else if (b.status === 'pending') h += `<span class="muted" style="font-size:12px">Price on request</span><div style="margin-top:6px"><button class="btn btn-primary btn-sm" data-act="rentConfirm" data-id="${b.id}">✔ Confirm booking</button></div>`;
-  if (b.refundStatus === 'requested') h += `<div class="notice" style="margin-top:8px;font-size:12.5px"><b>💸 Refund requested: ${rs(b.refundAmount || 0)}</b> <span class="badge ${rRefundWithin(b) ? 'b-ok' : 'b-red'}">${rRefundWithin(b) ? 'within refund period' : 'LATE – outside refund period'}</span><br>${esc(b.refundBank)} · ${esc(b.refundAccName)}<br><b>${esc(b.refundAccNo)}</b>${b.refundNote ? '<br><i>“' + esc(b.refundNote) + '”</i>' : ''}<br><button class="btn btn-primary btn-sm" style="margin-top:6px" data-act="rentRefundPaid" data-id="${b.id}">✔ Refund paid – notify on WhatsApp</button></div>`;
-  if (b.refundStatus === 'paid') h += '<div style="margin-top:6px"><span class="badge b-ok">✓ Refund paid</span></div>';
-  return h || '—';
+  const pi = payInfo(b), sy = rSys(b); let h = '';
+  const adv = pi.advPaid ? '<span class="badge b-ok">✓ received</span>' : (b.slipAt ? '<span class="badge b-blue">slip received</span>' : (pi.advance > 0 ? '<span class="badge b-warn">awaiting</span>' : ''));
+  const bal = pi.balPaid ? '<span class="badge b-ok">✓ paid</span>' : (b.balanceSlipAt ? '<span class="badge b-blue">slip received</span>' : (pi.advPaid ? '<span class="badge b-warn">due</span>' : '<span class="muted">—</span>'));
+  h += `<div class="paybox" style="font-size:12.5px;line-height:1.55"><div>Total <b>${rs(pi.total)}</b>${sy != null && !b.totalFinal && sy !== pi.total ? ` <span class="badge b-red" title="Recalculated from the current rates">⚠ system ${rs(sy)}</span>` : ''}</div>
+    <div>Advance <b>${rs(pi.advance)}</b> ${adv}${(() => { const e = sy ? advanceOf(sy, b.advancePct || 50) : null; return e != null && !b.advanceVerified && e !== b.advanceDue && b.advanceDue > 0 ? ` <span class="badge b-red" title="Advance recalculated from the current rates">⚠ should be ${rs(e)}</span>` : ''; })()}</div>
+    <div>Balance <b>${rs(pi.balance)}</b> ${bal}</div><div class="muted">Received ${rs(pi.received)} · To collect ${rs(pi.due)}</div></div>`;
+  const acts = [];
+  if (b.status === 'pending') {
+    if (b.advanceDue > 0 && !b.slipAt) acts.push(`<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${rWaTo(b, 'Hi ' + b.name + ', this is Mentobeam. To verify your advance payment (' + rs(b.advanceDue) + ') for ' + b.spaceName + ' on ' + fmtDate(b.date) + ', please attach your bank transfer slip: open ' + rSiteBase() + b.spaceId + '.html > My bookings > Attach advance slip. Booking code: ' + b.id)}">🔔 Remind to attach slip</a>`);
+    else { if (b.slipAt) acts.push(`<button class="btn btn-ghost btn-sm" data-act="rentSlip" data-id="${b.id}">👁 View advance slip</button>`); acts.push(`<button class="btn btn-primary btn-sm" data-act="rentConfirm" data-id="${b.id}">✔ Confirm booking</button>`); }
+  } else if (b.status === 'confirmed' && !b.closed) {
+    if (b.balanceSlipAt) acts.push(`<button class="btn btn-ghost btn-sm" data-act="rentSlip" data-id="${b.id}" data-kind="balance">👁 View balance slip</button>`);
+    if (pi.balance > 0) { acts.push(`<button class="btn btn-primary btn-sm" data-act="rentBalance" data-id="${b.id}">✔ ${b.balanceSlipAt ? 'Verify balance & close' : 'Mark balance paid'}</button>`);
+      if (!b.balanceSlipAt) acts.push(`<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${rWaTo(b, 'Hi ' + b.name + ', this is Mentobeam. Reminder: the balance of ' + rs(pi.balance) + ' for ' + b.spaceName + ' on ' + fmtDate(b.date) + ' is due on or before the booking date. Please pay and attach the slip: ' + rSiteBase() + b.spaceId + '.html > My bookings > Pay balance. Booking code: ' + b.id)}">🔔 Remind balance</a>`); }
+  }
+  if (b.closed) acts.push('<span class="badge b-ok">✓ Paid in full – transaction closed</span>');
+  if (b.refundStatus === 'requested') acts.push('<span class="badge b-warn">💸 Refund requested – see Refunds page</span>');
+  else if (b.refundStatus === 'paid') acts.push('<span class="badge b-ok">✓ Refund paid</span>');
+  else if (b.refundStatus === 'rejected') acts.push('<span class="badge b-red">Refund rejected</span>');
+  if (b.status === 'cancelled' && b.slipAt && !b.advanceVerified && !b.slipDeleted) acts.push(`<button class="btn btn-ghost btn-sm" data-act="rentSlip" data-id="${b.id}">👁 View slip</button>`);
+  return h + (acts.length ? `<div class="acts" style="margin-top:6px;flex-wrap:wrap">${acts.join('')}</div>` : '');
 }
 const flatRent = b => { const o = Object.assign({}, b); delete o.id; delete o.extras; return o; };
 
@@ -53,7 +65,7 @@ const flatRent = b => { const o = Object.assign({}, b); delete o.id; delete o.ex
 const _subscribe = window.subscribe;
 window.subscribe = function () {
   _subscribe();
-  if (!can('rentals')) return;
+  if (!(can('rentals') || can('refunds') || can('income'))) return;
   const bad = e => toast('Rentals data error: ' + errMsg(e), 'err');
   unsubs.push(db.collection('spaces').onSnapshot(s => { rentSpaces = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
   unsubs.push(db.collection('settings').doc('rental').onSnapshot(s => { rentalCfg = s.exists ? s.data() : {}; refresh(); }, bad));
@@ -63,7 +75,8 @@ window.subscribe = function () {
       if (c.type === 'added') toast('🏛️ New rental booking: ' + d.spaceName + ' – ' + d.name + (d.slipAt ? ' (slip attached)' : ''), 'ok');
       else if (c.type === 'modified') { const o = rentBookings.find(x => x.id === c.doc.id);
         if (o && o.refundStatus !== 'requested' && d.refundStatus === 'requested') toast('💸 Refund requested: ' + d.name + ' – ' + rs(d.refundAmount || 0), 'err');
-        else if (o && !o.slipAt && d.slipAt) toast('📎 Payment slip attached: ' + d.name, 'ok'); }
+        else if (o && !o.slipAt && d.slipAt) toast('📎 Advance slip attached: ' + d.name, 'ok');
+        else if (o && !o.balanceSlipAt && d.balanceSlipAt) toast('📎 Balance slip attached: ' + d.name, 'ok'); }
     });
     rentFirst = false; rentBookings = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh();
   }, bad));
@@ -249,49 +262,67 @@ A.rentSaveTerms = (d, btn) => run(btn, async () => {
 });
 async function rSetStatus(id, status, extra) {
   const bk = rentBookings.find(x => x.id === id), sy = bk ? rSys(bk) : null, up = Object.assign({ status, statusAt: Date.now() }, extra || {});
-  if (sy !== null && bk && bk.estimate !== sy) { up.estimateCustomer = bk.estimate || 0; up.estimate = sy; }   // keep the system price, remember what the browser sent
+  if (sy !== null && bk && bk.estimate !== sy && up.totalFinal == null) { up.estimateCustomer = bk.estimate || 0; up.estimate = sy; }   // keep the system price, remember what the browser sent
   await db.collection('rentBookings').doc(id).update(up); sheetRent([id]);
 }
 C.rentStatus = el => {
-  const b = rentBookings.find(x => x.id === el.dataset.id);
-  if (el.value === 'confirmed' && b && b.advanceDue > 0 && !b.advanceVerified) { views.rentals.paint(); return A.rentConfirm({ id: b.id }); }   // confirming always goes through the slip check
-  run(null, async () => { await rSetStatus(el.dataset.id, el.value); toast('Status: ' + el.value, 'ok'); });
+  const b = rentBookings.find(x => x.id === el.dataset.id), v = el.value;
+  if (v === 'confirmed' && b && !b.advanceVerified && b.status === 'pending') { views.rentals.paint(); return A.rentConfirm({ id: b.id }); }   // confirming always goes through the slip check
+  if (v === 'completed' && b && !b.closed) { views.rentals.paint(); return A.rentBalance({ id: b.id }); }                                       // completing = collecting the balance
+  run(null, async () => { await rSetStatus(el.dataset.id, v, v === 'cancelled' ? { cancelledBy: 'admin', cancelledAt: Date.now() } : null); toast('Status: ' + v, 'ok'); });
 };
-A.rentConfirm = async d => {
+const rNum = v => Math.max(0, Math.round(Number(v) || 0));
+A.rentConfirm = d => {
   const b = rentBookings.find(x => x.id === d.id); if (!b) return;
   const needs = b.advanceDue > 0 && !b.advanceVerified;
   if (needs && !b.slipAt) { toast('No payment slip yet – use “Remind to attach slip”', 'err'); return; }
-  if (!await confirmBox(needs ? 'Confirm this booking? The payment slip will be <b>downloaded to this device</b> and then <b>deleted from the database</b> to free space.' : 'Confirm this booking?', { okText: 'Confirm booking', title: 'Confirm booking' })) return;
-  run(null, async () => {
-    const extra = {}; if (needs) { await rTakeSlip(b); extra.advanceVerified = true; extra.slipDeleted = true; }
-    await rSetStatus(b.id, 'confirmed', extra); toast('Booking confirmed' + (needs ? ' – slip downloaded & removed from the database' : ''), 'ok');
-  });
+  const pi = payInfo(b), sy = rSys(b), t0 = pi.total || sy || 0;
+  const m = modal(`<h2 class="mh">Confirm booking</h2><p class="msub">${esc(b.name)} · ${esc(b.spaceName)} · ${fmtDate(b.date)}</p>
+    <div class="row2"><div class="field"><label>Final total (Rs)</label><input id="cfTotal" type="number" min="0" value="${t0}"/></div><div class="field"><label>Advance received (Rs)</label><input id="cfAdv" type="number" min="0" value="${b.advanceDue || 0}"/></div></div>
+    <div class="notice" id="cfBal"></div>${needs ? '<p class="help" style="margin-top:8px">The payment slip will be <b>downloaded to this device</b> and then <b>deleted from the database</b> to free space.</p>' : ''}
+    <div class="err" id="cfErr"></div><button class="btn btn-primary btn-block" id="cfGo" style="margin-top:10px">✔ Confirm booking</button>`);
+  const calc = () => { const t = rNum(m.$('#cfTotal').value), a = rNum(m.$('#cfAdv').value); m.$('#cfBal').innerHTML = 'Balance to collect on the day: <b>' + rs(Math.max(0, t - a)) + '</b>'; }; calc();
+  m.$('#cfTotal').oninput = m.$('#cfAdv').oninput = calc;
+  m.$('#cfGo').onclick = () => {
+    const t = rNum(m.$('#cfTotal').value), a = rNum(m.$('#cfAdv').value), er = m.$('#cfErr'); er.textContent = '';
+    if (t <= 0) { er.textContent = 'Enter the final total.'; return; } if (a > t) { er.textContent = 'Advance cannot be more than the total.'; return; }
+    m.close(); run(null, async () => {
+      const now = Date.now(), extra = { totalFinal: t, advanceVerified: true, advanceReceived: a, advanceReceivedAt: now };
+      if (needs) { await rTakeSlip(b, 'advance'); extra.slipDeleted = true; }
+      if (t - a <= 0) Object.assign(extra, { closed: true, closedAt: now, balanceVerified: true, balanceReceived: 0, balanceReceivedAt: now });
+      await rSetStatus(b.id, 'confirmed', extra); toast('Booking confirmed' + (needs ? ' – slip downloaded & removed from the database' : ''), 'ok');
+    });
+  };
+};
+A.rentBalance = d => {
+  const b = rentBookings.find(x => x.id === d.id); if (!b) return; const pi = payInfo(b);
+  if (!pi.advPaid && pi.advance > 0) { toast('Confirm the advance first', 'err'); return; }
+  const m = modal(`<h2 class="mh">${b.balanceSlipAt ? 'Verify balance & close' : 'Mark balance paid'}</h2><p class="msub">${esc(b.name)} · ${esc(b.spaceName)} · ${fmtDate(b.date)} · Total ${rs(pi.total)}</p>
+    <div class="field"><label>Balance received (Rs)</label><input id="blAmt" type="number" min="0" value="${pi.balance}"/></div>
+    ${b.balanceSlipAt ? '<p class="help">The balance slip will be <b>downloaded to this device</b> and then <b>deleted from the database</b>.</p>' : '<p class="help">No slip attached – use this for cash / paid at the venue.</p>'}
+    <div class="err" id="blErr"></div><button class="btn btn-primary btn-block" id="blGo">✔ Balance paid – close transaction</button>`);
+  m.$('#blGo').onclick = () => {
+    const n = rNum(m.$('#blAmt').value); if (n <= 0 && pi.balance > 0) { m.$('#blErr').textContent = 'Enter the amount received.'; return; } m.close();
+    run(null, async () => {
+      const now = Date.now(), extra = { balanceVerified: true, balanceReceived: n, balanceReceivedAt: now, closed: true, closedAt: now };
+      if (b.balanceSlipAt) { await rTakeSlip(b, 'balance'); extra.balanceSlipDeleted = true; } else extra.balanceManual = true;
+      await rSetStatus(b.id, 'completed', extra); toast('Balance recorded – transaction closed', 'ok');
+    });
+  };
 };
 A.rentSlip = d => run(null, async () => {
-  const b = rentBookings.find(x => x.id === d.id), snap = await db.collection('rentSlips').doc(d.id).get();
+  const b = rentBookings.find(x => x.id === d.id), kind = d.kind === 'balance' ? 'balance' : 'advance', snap = await db.collection('rentSlips').doc(rSlipId({ id: d.id }, kind)).get();
   if (!snap.exists) { toast('Slip not found (already removed)', 'err'); return; }
-  const sl = snap.data(), url = URL.createObjectURL(await rSlipBlob(sl));
-  const m = modal(`<h2 class="mh">Payment slip</h2><p class="msub">${esc(b ? b.name : '')} · advance ${b ? rs(b.advanceDue) : ''} · ${esc(sl.name || '')}</p>
+  const sl = snap.data(), url = URL.createObjectURL(await rSlipBlob(sl)), pi = b ? payInfo(b) : { advance: 0, balance: 0 };
+  const m = modal(`<h2 class="mh">${kind === 'balance' ? 'Balance' : 'Advance'} payment slip</h2><p class="msub">${esc(b ? b.name : '')} · ${kind === 'balance' ? 'balance ' + rs(pi.balance) : 'advance ' + rs(b ? b.advanceDue : 0)} · ${esc(sl.name || '')}</p>
     ${sl.type === 'application/pdf' ? `<object data="${url}" type="application/pdf" style="width:100%;height:60vh;border-radius:10px;background:#fff"><p class="help">Your browser cannot preview PDFs here – use “Download only”.</p></object>` : `<img src="${url}" alt="slip" style="max-width:100%;max-height:62vh;display:block;margin:auto;border-radius:10px"/>`}
-    <p class="help" style="margin-top:10px">Use “Confirm booking” to approve – the slip is then downloaded and removed from the database automatically.</p><button class="btn btn-ghost btn-block" id="slDl">⬇ Download only (keep in database)</button>`, { wide: true, onClose: () => URL.revokeObjectURL(url) });
-  m.$('#slDl').onclick = () => rDownloadSlip(b || { name: 'customer', date: '', id: d.id }, sl);
+    <p class="help" style="margin-top:10px">Use ${kind === 'balance' ? '“Verify balance &amp; close”' : '“Confirm booking”'} to approve – the slip is then downloaded and removed from the database automatically.</p><button class="btn btn-ghost btn-block" id="slDl">⬇ Download only (keep in database)</button>`, { wide: true, onClose: () => URL.revokeObjectURL(url) });
+  m.$('#slDl').onclick = () => rDownloadSlip(b || { name: 'customer', date: '', id: d.id }, sl, kind);
 });
-A.rentRefundPaid = async d => {
-  const b = rentBookings.find(x => x.id === d.id); if (!b) return;
-  if (!await confirmBox('Confirm that you transferred <b>' + rs(b.refundAmount || 0) + '</b> to <b>' + esc(b.refundBank) + '</b> · ' + esc(b.refundAccName) + ' · ' + esc(b.refundAccNo) + '?<br>A WhatsApp message for the customer is prepared next.', { okText: 'Refund paid', title: 'Mark refund as paid' })) return;
-  run(null, async () => {
-    const extra = { refundStatus: 'paid', refundPaidAt: Date.now() };
-    if (b.slipAt && !b.advanceVerified) { await rTakeSlip(b); extra.slipDeleted = true; }          // free the space of an unverified slip too
-    await db.collection('rentBookings').doc(b.id).update(extra); sheetRent([b.id]);
-    const msg = 'Hi ' + b.name + ', your refund of ' + rs(b.refundAmount || 0) + ' for your ' + b.spaceName + ' booking on ' + fmtDate(b.date) + ' has been transferred to your ' + b.refundBank + ' account (' + rMask(b.refundAccNo) + '). Thank you – Mentobeam.';
-    modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund marked as paid</h2><p class="msub">Send the confirmation to ${esc(b.name)} on WhatsApp.</p>
-      <a class="btn btn-primary btn-block btn-lg" target="_blank" rel="noopener" href="${waLink(b.phone, msg)}">💬 Send WhatsApp message to ${esc(b.phone)}</a></div>`);
-  });
-};
 A.rentDel = async d => {
   const b = rentBookings.find(x => x.id === d.id); if (!b) return;
   if (!await confirmBox('Delete the booking of <b>' + esc(b.name) + '</b>? (It stays in the Google Sheet, marked Cancelled.)', { okText: 'Delete', danger: true, title: 'Delete booking?' })) return;
-  run(null, async () => { await db.collection('rentSlips').doc(d.id).delete(); await db.collection('rentBookings').doc(d.id).delete(); toast('Deleted', 'ok'); sheetRent([d.id]); });
+  run(null, async () => { await db.collection('rentSlips').doc(d.id).delete(); await db.collection('rentSlips').doc(d.id + '_bal').delete(); await db.collection('rentBookings').doc(d.id).delete(); toast('Deleted', 'ok'); sheetRent([d.id]); });
 };
 A.rentSeed = (d, btn) => run(btn, async () => {
   for (const sp of rMerged()) { if (rDoc(sp.id)) continue; const o = JSON.parse(JSON.stringify(sp)); delete o.photos; o.updatedAt = Date.now(); await db.collection('spaces').doc(sp.id).set(o); }
