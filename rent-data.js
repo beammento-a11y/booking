@@ -141,3 +141,15 @@ async function slipToData(file) {
   if (data.length > 900000) throw new Error('That image is too large. Please upload a smaller photo.');
   return { data, type: data.startsWith('data:image/jpeg') ? 'image/jpeg' : file.type, name: file.name.replace(/\.[^.]+$/, '') + '.jpg', size: Math.round(data.length * 3 / 4) };
 }
+
+/* payment ledger of one booking (used by the customer page, the admin bookings table, refunds and income) */
+function payInfo(b) {
+  const total = Number(b.totalFinal != null ? b.totalFinal : b.estimate) || 0;
+  const advance = Number(b.advanceReceived != null ? b.advanceReceived : b.advanceDue) || 0;
+  const advPaid = !!b.advanceVerified, balance = Math.max(0, total - advance);
+  const balPaid = !!b.balanceVerified || (!!b.closed && balance <= 0);
+  const received = (advPaid ? advance : 0) + (b.balanceVerified ? Number(b.balanceReceived) || 0 : 0);
+  return { total, advance, advPaid, balance, balPaid, received, due: Math.max(0, total - received), closed: !!b.closed };
+}
+const refundBase = b => Number(b.advanceReceived != null ? b.advanceReceived : b.advanceDue) || 0;
+const waDigits = v => { let n = String(v || '').replace(/\D/g, ''); if (n.startsWith('0')) n = '94' + n.slice(1); return n; };
