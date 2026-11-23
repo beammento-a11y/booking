@@ -119,6 +119,10 @@ function waLink(num, text) { const n = String(num || '').replace(/\D/g, '').repl
 const LK_BANKS = ['Bank of Ceylon', "People's Bank", 'Commercial Bank', 'Hatton National Bank (HNB)', 'Sampath Bank', 'Seylan Bank', 'Nations Trust Bank (NTB)', 'DFCC Bank', 'NDB Bank', 'Pan Asia Bank', 'Union Bank', 'Amana Bank', 'Cargills Bank', 'National Savings Bank (NSB)', 'Regional Development Bank', 'Other'];
 const advanceOf = (total, pct) => total > 0 ? Math.ceil(total * (pct || 50) / 100 / 100) * 100 : 0;      // rounded up to the next Rs 100
 const daysUntil = d => Math.round((parseD(d).getTime() - new Date(new Date().toDateString()).getTime()) / 864e5);
+// refund window: counted from the moment the admin confirmed the booking (not the booking date). confirmedAt is set once, the first time a
+// booking is confirmed, and never moves again even if the status later changes (cancelled/completed) - so the deadline stays fixed.
+const confirmedAtOf = b => b.confirmedAt || b.advanceReceivedAt || b.statusAt || 0;
+const refundWithin = (b, days, atTime) => confirmedAtOf(b) > 0 && (atTime || Date.now()) - confirmedAtOf(b) <= Number(days || 0) * 864e5;
 const SLIP_MAX_PDF = 650 * 1024;
 const fileToDataUrl = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Could not read the file.')); r.readAsDataURL(f); });
 function imgToJpeg(file, maxPx, q) {
