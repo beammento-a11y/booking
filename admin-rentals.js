@@ -18,7 +18,7 @@ function rSys(b) {
 /* ---------- advance payment slips + refunds ---------- */
 const rSiteBase = () => location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
 const rMask = n => '****' + String(n || '').slice(-4);
-function rRefundWithin(b) {   // was the cancellation made within the refund window counted from when the admin confirmed the booking?
+function rRefundWithin(b) {   // was the booking confirmed in time, and cancelled within the refund window after the admin confirmed it?
   const days = (rentalCfg.refundDays === '' || rentalCfg.refundDays == null) ? 7 : Number(rentalCfg.refundDays);
   return refundWithin(b, days, b.cancelledAt || Date.now());
 }
@@ -177,7 +177,7 @@ function rTermsHTML() {
     <div class="row2">${f('rtWa', 'WhatsApp number', r.whatsapp || '')}${f('rtMail', 'Email', r.email || '')}</div><div class="row2">${f('rtWeb', 'Website', r.web || '')}${f('rtHours', 'Opening hours', r.hours || '')}</div>${f('rtAddr', 'Address', r.address || '')}
     <h3 style="margin-top:18px">Advance payment & refunds</h3><p class="help" style="margin-bottom:10px">Customers see the bank details after pressing “Book”; the booking is placed only after they pay the advance and press “I made the advance payment”.</p>
     <div class="row2">${f('rtBank', 'Bank name', r.bankName || '')}${f('rtBranch', 'Branch', r.bankBranch || '')}</div><div class="row2">${f('rtAccName', 'Account name', r.bankAccName || '')}${f('rtAccNo', 'Account number', r.bankAccNo || '')}</div>
-    ${f('rtPayNote', 'Payment note (optional)', r.payNote || '')}<div class="row2">${f('rtAdv', 'Advance %', r.advancePct != null ? r.advancePct : 50)}${f('rtRefDays', 'Refund allowed if cancelled within this many days of the booking being confirmed', r.refundDays != null && r.refundDays !== '' ? r.refundDays : 7)}</div>${f('rtRefHrs', 'Refund paid within (hours) – shown to customers', r.refundHours != null ? r.refundHours : 48)}
+    ${f('rtPayNote', 'Payment note (optional)', r.payNote || '')}<div class="row2">${f('rtAdv', 'Advance %', r.advancePct != null ? r.advancePct : 50)}${f('rtRefDays', 'Refund period (days): booking must be confirmed, and then cancelled, within this many days', r.refundDays != null && r.refundDays !== '' ? r.refundDays : 7)}</div>${f('rtRefHrs', 'Refund paid within (hours) – shown to customers', r.refundHours != null ? r.refundHours : 48)}
     <button class="btn btn-primary" data-act="rentSaveTerms">💾 Save</button></div>`;
 }
 
