@@ -238,7 +238,7 @@ async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
   const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && refundWithin(b, refundDays());
   if (refundable) return refundForm(b, true);
-  const ok = await confirmBox(paid ? 'This booking is outside the refund period (refunds are only available within ' + refundDays() + ' day(s) of us confirming the booking), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
+  const ok = await confirmBox(paid ? 'This booking is outside the refund period (refunds are only available if the booking was confirmed within ' + refundDays() + ' day(s) of being made and is cancelled within ' + refundDays() + ' day(s) of us confirming it), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
   try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }; await db.collection('rentBookings').doc(id).update(up); Object.assign(b, up); renderMy(); toast('Booking cancelled', 'ok');
     if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
