@@ -131,7 +131,7 @@ function payStep(data) {
   const row = (l, v, cp) => `<div class="rn-bk"><span>${l}</span><b>${esc(v)}</b>${cp ? `<button type="button" class="btn btn-ghost btn-sm" data-cp="${esc(v)}">Copy</button>` : ''}</div>`;
   const m = modal(`<div class="rn-pay"><h2 class="mh" style="padding:0">Pay the advance to place your booking</h2><p class="msub">Your booking is placed after you pay the ${data.advancePct}% advance by bank transfer and tell us below.</p>
     <div class="rn-paybox"><div><b>${esc(S.name)}</b> · ${esc(data.packageName)}<br>${fmtDate(data.date)}${data.endTime ? ' · ' + fmtTime(data.startTime) + ' – ' + fmtTime(data.endTime) : ''}<br><span class="muted">Estimated total ${rs(data.estimate)}${data.quoteItems ? ' + on-request items' : ''}</span></div>
-      <div class="rn-adv"><span>Advance to pay (${data.advancePct}%)</span><b>${rs(data.advanceDue)}</b></div></div>
+      <div class="rn-adv"><span>Advance to pay (${data.advancePct}%)</span><b>${rs(data.advanceDue)}</b><span>Balance ${rs(Math.max(0, data.estimate - data.advanceDue))} – pay on or before your booking date</span></div></div>
     <h3 style="font-size:15px;margin:14px 0 6px">Bank transfer details</h3>
     ${row('Bank', r.bankName)}${r.bankBranch ? row('Branch', r.bankBranch) : ''}${row('Account name', r.bankAccName)}${row('Account number', r.bankAccNo, true)}${row('Reference', data.name + ' – ' + data.phone)}
     ${r.payNote ? `<p class="help" style="margin-top:6px">${esc(r.payNote)}</p>` : ''}
@@ -159,7 +159,7 @@ async function place(data, slip, pm) {
   if (slip) { data.paidClaim = true; data.slipAt = Date.now(); data.slipName = String(slip.name || 'slip').slice(0, 100); }
   try {
     const b = db.batch(); b.set(ref, data);
-    if (slip) b.set(db.collection('rentSlips').doc(ref.id), { data: slip.data, type: slip.type, name: data.slipName, size: slip.size || 0, at: Date.now() });
+    if (slip) b.set(db.collection('rentSlips').doc(ref.id), { data: slip.data, type: slip.type, name: data.slipName, size: slip.size || 0, at: Date.now(), kind: 'advance' });
     await b.commit();
   } catch (x) { err.textContent = 'Sorry, the booking could not be placed. ' + errMsg(x); return false; }
   localStorage.setItem('mb_profile', JSON.stringify({ name: data.name, email: data.email, phone: data.phone }));
@@ -181,63 +181,90 @@ async function loadMy() {
   renderMy();
 }
 function payLine(b) {
-  let h = '';
-  if (b.advanceDue > 0 && b.status !== 'cancelled') {
-    h += `<div class="rn-pl">Advance ${rs(b.advanceDue)} · ${b.advanceVerified ? '<span class="badge b-ok">✓ Advance verified</span>' : (b.slipAt ? '<span class="badge b-blue">Slip received – being verified</span>' : '<span class="badge b-warn">Slip not attached</span>')}</div>`;
-    if (!b.advanceVerified && !b.slipAt) h += `<div class="rn-remind">⚠ Please attach your bank slip so we can verify your payment and confirm your booking. <button class="btn btn-primary btn-sm" data-sl="${b.id}">Attach slip</button></div>`;
+  const pi = payInfo(b); let h = '';
+  if (pi.total > 0 && b.status !== 'cancelled') {
+    h += `<div class="rn-pl">Total <b>${rs(pi.total)}</b> · Advance ${rs(pi.advance)} ${pi.advPaid ? '<span class="badge b-ok">✓ paid</span>' : (b.slipAt ? '<span class="badge b-blue">slip received</span>' : (pi.advance > 0 ? '<span class="badge b-warn">slip not attached</span>' : ''))}</div>`;
+    if (pi.advPaid || pi.advance === 0) h += `<div class="rn-pl">Balance <b>${rs(pi.balance)}</b> ${pi.balPaid ? '<span class="badge b-ok">✓ paid – transaction closed</span>' : (b.balanceSlipAt ? '<span class="badge b-blue">slip received – being verified</span>' : '<span class="badge b-warn">due on or before ' + fmtDate(b.date) + '</span>')}</div>`;
+    if (!pi.advPaid && pi.advance > 0 && !b.slipAt) h += `<div class="rn-remind">⚠ Please attach your bank slip so we can verify your advance payment and confirm your booking. <button class="btn btn-primary btn-sm" data-sl="${b.id}">Attach advance slip</button></div>`;
+    if ((pi.advPaid || pi.advance === 0) && !pi.balPaid && pi.balance > 0 && !b.balanceSlipAt && b.status === 'confirmed') h += `<div class="rn-remind">Pay the balance <b>${rs(pi.balance)}</b> by bank transfer on or before your booking date, then attach the slip. <button class="btn btn-primary btn-sm" data-bal="${b.id}">Pay balance / attach slip</button></div>`;
   }
-  if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours.</div>`;
-  if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundAmount || 0)}</div>`;
+  if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours. We will message you on WhatsApp.</div>`;
+  if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0))} – please check your bank account.</div>`;
+  if (b.refundStatus === 'rejected') h += `<div class="rn-pl"><span class="badge b-red">Refund not approved</span> ${esc(b.refundRejectReason || '')}</div>`;
   return h;
 }
+const adminPaid = b => b.advanceVerified || b.paidClaim;
 function renderMy() {
   const list = myIds.map(id => myDocs[id]).filter(b => b && b.spaceId === SID).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
   $('#my').hidden = !list.length; if (!list.length) return;
-  $('#myList').innerHTML = list.map(b => { const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr(), refundable = can && b.paidClaim && b.advanceDue > 0 && daysUntil(b.date) >= refundDays();
-    return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}${b.estimate ? ' · ' + rs(b.estimate) : ''}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
-    <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}</div></div>`; }).join('');
+  $('#myList').innerHTML = list.map(b => {
+    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && adminPaid(b) && refundBase(b) > 0 && daysUntil(b.date) >= refundDays();
+    const askRefund = b.status === 'cancelled' && b.cancelledBy === 'admin' && !b.refundStatus && adminPaid(b) && refundBase(b) > 0;
+    return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
+    <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}${askRefund ? `<br><button class="btn btn-primary btn-sm" style="margin-top:8px" data-rf="${b.id}">Request to refund</button>` : ''}</div></div>`; }).join('');
   $$('[data-c]').forEach(x => x.onclick = () => cancelMy(x.dataset.c));
-  $$('[data-sl]').forEach(x => x.onclick = () => attachSlip(x.dataset.sl));
+  $$('[data-sl]').forEach(x => x.onclick = () => attachSlip(x.dataset.sl, 'advance'));
+  $$('[data-bal]').forEach(x => x.onclick = () => balanceStep(x.dataset.bal));
+  $$('[data-rf]').forEach(x => x.onclick = () => refundForm(myDocs[x.dataset.rf], false));
 }
-/* attach (or replace) the payment slip later */
-function attachSlip(id) {
-  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf';
-  inp.onchange = async () => { const f = inp.files[0]; if (!f) return;
-    try { toast('Uploading slip…'); const sl = await slipToData(f), name = String(sl.name).slice(0, 100), at = Date.now(), b = db.batch();
-      b.set(db.collection('rentSlips').doc(id), { data: sl.data, type: sl.type, name, size: sl.size || 0, at }); b.update(db.collection('rentBookings').doc(id), { slipAt: at, slipName: name, paidClaim: true }); await b.commit();
-      Object.assign(myDocs[id], { slipAt: at, slipName: name, paidClaim: true }); renderMy(); toast('Slip attached – thank you!', 'ok');
+/* attach a payment slip later: kind 'advance' (slip id = booking id) or 'balance' (slip id = booking id + _bal) */
+function attachSlip(id, kind, file) {
+  const run1 = async f => {
+    try { toast('Uploading slip…'); const sl = await slipToData(f), name = String(sl.name).slice(0, 100), at = Date.now(), b = db.batch(), bal = kind === 'balance';
+      b.set(db.collection('rentSlips').doc(bal ? id + '_bal' : id), { data: sl.data, type: sl.type, name, size: sl.size || 0, at, kind: bal ? 'balance' : 'advance' });
+      b.update(db.collection('rentBookings').doc(id), bal ? { balanceSlipAt: at, balanceSlipName: name } : { slipAt: at, slipName: name, paidClaim: true }); await b.commit();
+      Object.assign(myDocs[id], bal ? { balanceSlipAt: at, balanceSlipName: name } : { slipAt: at, slipName: name, paidClaim: true }); renderMy(); toast('Slip attached – thank you!', 'ok');
       if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(myDocs[id]) } });
-    } catch (e) { toast(errMsg(e), 'err'); } };
-  inp.click();
+      return true;
+    } catch (e) { toast(errMsg(e), 'err'); return false; } };
+  if (file) return run1(file);
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.onchange = () => { if (inp.files[0]) run1(inp.files[0]); }; inp.click();
+}
+/* balance payment: bank details + slip, on or before the booking date */
+function balanceStep(id) {
+  const b = myDocs[id], pi = payInfo(b), r = R.rental; let slip = null;
+  const row = (l, v, cp) => `<div class="rn-bk"><span>${l}</span><b>${esc(v)}</b>${cp ? `<button type="button" class="btn btn-ghost btn-sm" data-cp="${esc(v)}">Copy</button>` : ''}</div>`;
+  const m = modal(`<h2 class="mh" style="padding:0">Pay the balance</h2><p class="msub">Pay the remaining balance by bank transfer on or before <b>${fmtDate(b.date)}</b>, then attach the slip.</p>
+    <div class="rn-paybox"><div><b>${esc(b.spaceName)}</b> · ${esc(b.packageName)}<br><span class="muted">Total ${rs(pi.total)} · Advance paid ${rs(pi.advance)}</span></div><div class="rn-adv"><span>Balance to pay</span><b>${rs(pi.balance)}</b></div></div>
+    <h3 style="font-size:15px;margin:14px 0 6px">Bank transfer details</h3>${r.bankAccNo ? row('Bank', r.bankName) + (r.bankBranch ? row('Branch', r.bankBranch) : '') + row('Account name', r.bankAccName) + row('Account number', r.bankAccNo, true) + row('Reference', b.name + ' – ' + b.phone) : '<p class="help">Please contact us on WhatsApp for the bank details.</p>'}
+    <h3 style="font-size:15px;margin:16px 0 6px">Upload the balance slip</h3><input type="file" id="bslipF" accept="image/*,application/pdf"/><div id="bslipPrev" class="help"></div><div class="err" id="bErr"></div>
+    <button class="btn btn-primary btn-block btn-lg" id="bGo" type="button">I paid the balance</button><button class="btn btn-ghost btn-block" id="bBack" type="button" style="margin-top:8px">Back</button>`);
+  m.$('#bBack').onclick = () => m.close();
+  m.el.querySelectorAll('[data-cp]').forEach(x => x.onclick = () => { try { navigator.clipboard.writeText(x.dataset.cp); toast('Copied', 'ok'); } catch (e) { /* ignore */ } });
+  m.$('#bslipF').onchange = async e => { const f = e.target.files[0]; slip = null; m.$('#bErr').textContent = ''; if (!f) return; try { slip = f; await slipToData(f); m.$('#bslipPrev').textContent = '✅ ' + f.name; } catch (x) { slip = null; m.$('#bErr').textContent = errMsg(x); e.target.value = ''; } };
+  m.$('#bGo').onclick = async () => { if (!slip) { m.$('#bErr').textContent = 'Please attach the balance slip.'; return; } const bt = m.$('#bGo'); bt.disabled = true; bt.innerHTML = '<span class="spin"></span> Sending...'; const ok = await attachSlip(id, 'balance', slip); if (ok) m.close(); else { bt.disabled = false; bt.textContent = 'I paid the balance'; } };
 }
 async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
-  const refundable = b.paidClaim && b.advanceDue > 0 && daysUntil(b.date) >= refundDays();
-  if (refundable) return refundForm(b);
-  const late = b.paidClaim && b.advanceDue > 0;
-  const ok = await confirmBox(late ? 'This booking is inside the no-refund period (cancel ' + refundDays() + ' or more days ahead for a refund), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
-  try { await db.collection('rentBookings').doc(id).update({ status: 'cancelled', cancelledAt: Date.now() }); Object.assign(b, { status: 'cancelled' }); renderMy(); toast('Booking cancelled', 'ok');
+  const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && daysUntil(b.date) >= refundDays();
+  if (refundable) return refundForm(b, true);
+  const ok = await confirmBox(paid ? 'This booking is inside the no-refund period (cancel ' + refundDays() + ' or more days ahead for a refund), so the advance is not refundable. Cancel anyway?' : 'Cancel this booking?', { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' }); if (!ok) return;
+  try { const up = { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' }; await db.collection('rentBookings').doc(id).update(up); Object.assign(b, up); renderMy(); toast('Booking cancelled', 'ok');
     if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [id], records: { [id]: flat(b) } });
   } catch (e) { toast(errMsg(e), 'err'); }
 }
-function refundForm(b) {
-  const hrs = R.rental.refundHours || 48;
-  const m = modal(`<h2 class="mh" style="padding:0">Cancel and request refund</h2><p class="msub">Your advance of <b>${rs(b.advanceDue)}</b> will be refunded to the bank account below. <b>The refund is paid within ${hrs} hours</b> after we process your request, and we will message you on WhatsApp when it is done.</p>
+/* "Request to refund" form. cancelNow = cancel the booking in the same step (customer cancelling); false = booking was already cancelled by the organiser */
+function refundForm(b, cancelNow) {
+  const hrs = R.rental.refundHours || 48, amt = refundBase(b);
+  const m = modal(`<h2 class="mh" style="padding:0">Request to refund</h2><p class="msub">${cancelNow ? 'Your booking will be cancelled and your ' : 'Your '}advance of <b>${rs(amt)}</b> will be refunded to the bank account below. <b>The refund is paid within ${hrs} hours</b> and we will confirm it on your WhatsApp.</p>
     <div class="field"><label>Bank <span class="req">*</span></label><select id="rfBank"><option value="">Select your bank</option>${LK_BANKS.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>Account name <span class="req">*</span></label><input id="rfName" value="${esc(b.name)}"/></div>
     <div class="field"><label>Account number <span class="req">*</span></label><input id="rfNo" inputmode="numeric" placeholder="e.g. 1234567890"/></div>
+    <div class="field"><label>WhatsApp number <span class="req">*</span></label><input id="rfWa" type="tel" value="${esc(b.phone)}" placeholder="07X XXX XXXX"/></div>
     <div class="field"><label>Note (optional)</label><textarea id="rfNote" placeholder="Reason for cancelling, or anything we should know"></textarea></div>
-    <div class="err" id="rfErr"></div><button class="btn btn-primary btn-block btn-lg" id="rfGo">Cancel booking & request refund</button><button class="btn btn-ghost btn-block" id="rfBack" style="margin-top:8px">Keep my booking</button>`);
+    <div class="err" id="rfErr"></div><button class="btn btn-primary btn-block btn-lg" id="rfGo">${cancelNow ? 'Cancel booking & request refund' : 'Send refund request'}</button><button class="btn btn-ghost btn-block" id="rfBack" style="margin-top:8px">${cancelNow ? 'Keep my booking' : 'Close'}</button>`);
   m.$('#rfBack').onclick = () => m.close();
   m.$('#rfGo').onclick = async () => {
-    const bank = m.$('#rfBank').value, nm = m.$('#rfName').value.trim(), no = m.$('#rfNo').value.replace(/[\s-]/g, ''), er = m.$('#rfErr'); er.textContent = '';
-    if (!bank) { er.textContent = 'Please select your bank.'; return; } if (nm.length < 2) { er.textContent = 'Please enter the account name.'; return; } if (!/^\d{6,20}$/.test(no)) { er.textContent = 'Please enter a valid account number (digits only).'; return; }
-    const up = { status: 'cancelled', cancelledAt: Date.now(), refundStatus: 'requested', refundBank: bank, refundAccName: nm.slice(0, 100), refundAccNo: no, refundNote: m.$('#rfNote').value.trim().slice(0, 300), refundAmount: b.advanceDue, refundRequestedAt: Date.now() };
+    const bank = m.$('#rfBank').value, nm = m.$('#rfName').value.trim(), no = m.$('#rfNo').value.replace(/[\s-]/g, ''), wa = waDigits(m.$('#rfWa').value), er = m.$('#rfErr'); er.textContent = '';
+    if (!bank) { er.textContent = 'Please select your bank.'; return; } if (nm.length < 2) { er.textContent = 'Please enter the account name.'; return; }
+    if (!/^\d{6,20}$/.test(no)) { er.textContent = 'Please enter a valid account number (digits only).'; return; } if (!/^\d{9,15}$/.test(wa)) { er.textContent = 'Please enter a valid WhatsApp number.'; return; }
+    const up = { refundStatus: 'requested', refundBank: bank, refundAccName: nm.slice(0, 100), refundAccNo: no, refundWhatsapp: wa, refundNote: m.$('#rfNote').value.trim().slice(0, 300), refundAmount: amt, refundRequestedAt: Date.now() };
+    if (cancelNow) Object.assign(up, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'customer' });
     const btn = m.$('#rfGo'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
     try { await db.collection('rentBookings').doc(b.id).update(up); Object.assign(b, up); m.close(); renderMy();
-      const m2 = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund requested</h2><p class="msub">Your booking is cancelled. Your refund of <b>${rs(b.advanceDue)}</b> will be paid within <b>${hrs} hours</b>. We will message you on WhatsApp once it is done.</p><button class="btn btn-blue btn-block" id="okr">OK</button></div>`); m2.$('#okr').onclick = m2.close;
+      const m2 = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Refund requested</h2><p class="msub">${cancelNow ? 'Your booking is cancelled. ' : ''}Your refund of <b>${rs(amt)}</b> will be paid within <b>${hrs} hours</b>. We will send a confirmation to your WhatsApp (${esc(wa)}) once it is done.</p><button class="btn btn-blue btn-block" id="okr">OK</button></div>`); m2.$('#okr').onclick = m2.close;
       if (R.site.sheetOn && R.site.sheetUrl) sheetSend(R.site.sheetUrl, { action: 'rent', rentIds: [b.id], records: { [b.id]: flat(b) } });
-    } catch (e) { er.textContent = errMsg(e); btn.disabled = false; btn.textContent = 'Cancel booking & request refund'; }
+    } catch (e) { er.textContent = errMsg(e); btn.disabled = false; btn.textContent = cancelNow ? 'Cancel booking & request refund' : 'Send refund request'; }
   };
 }
 init();
