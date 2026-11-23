@@ -2,7 +2,7 @@
    Everything here can be edited later in Admin → Rentals (the database then overrides these defaults). */
 const DEF_TERMS = [
   'A 50% advance confirms your date. The balance is paid on or before the day.',
-  'Cancel 7 or more days ahead for a full refund of the advance. Later cancellations keep the advance.',
+  'A full refund of the advance is given only if the booking is cancelled within the refund period (7 days) after we confirm it. Later cancellations keep the advance.',
   'Hourly bookings are for a minimum of 2 hours. Extra time is Rs 5,000 per hour.',
   'Weekend bookings are on request, subject to availability.'
 ];
@@ -119,10 +119,19 @@ function waLink(num, text) { const n = String(num || '').replace(/\D/g, '').repl
 const LK_BANKS = ['Bank of Ceylon', "People's Bank", 'Commercial Bank', 'Hatton National Bank (HNB)', 'Sampath Bank', 'Seylan Bank', 'Nations Trust Bank (NTB)', 'DFCC Bank', 'NDB Bank', 'Pan Asia Bank', 'Union Bank', 'Amana Bank', 'Cargills Bank', 'National Savings Bank (NSB)', 'Regional Development Bank', 'Other'];
 const advanceOf = (total, pct) => total > 0 ? Math.ceil(total * (pct || 50) / 100 / 100) * 100 : 0;      // rounded up to the next Rs 100
 const daysUntil = d => Math.round((parseD(d).getTime() - new Date(new Date().toDateString()).getTime()) / 864e5);
-// refund window: counted from the moment the admin confirmed the booking (not the booking date). confirmedAt is set once, the first time a
-// booking is confirmed, and never moves again even if the status later changes (cancelled/completed) - so the deadline stays fixed.
+// refund window (days set by the admin, counted as calendar days with the first day = day 1). Two checks must BOTH pass:
+//  1) booking made -> admin approved took no more than the refund days, and
+//  2) admin approved -> booking cancelled / refund requested took no more than the refund days.
+// e.g. 7 days, booked + approved on day 1: cancelling on day 7 is refundable, on day 8 it is not.
+// confirmedAt is set once, the first time a booking is confirmed, and never moves again even if the status later changes - so the deadline stays fixed.
 const confirmedAtOf = b => b.confirmedAt || b.advanceReceivedAt || b.statusAt || 0;
-const refundWithin = (b, days, atTime) => confirmedAtOf(b) > 0 && (atTime || Date.now()) - confirmedAtOf(b) <= Number(days || 0) * 864e5;
+const dayNoOf = t => { const d = new Date(t); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); };   // local calendar day number
+const daysSpan = (from, to) => Math.max(1, dayNoOf(to) - dayNoOf(from) + 1);                                                       // same day = 1, next day = 2, ...
+const refundWithin = (b, days, atTime) => {
+  const conf = confirmedAtOf(b), lim = Number(days || 0), now = atTime || Date.now(); if (!(conf > 0)) return false;
+  if (b.createdAt > 0 && daysSpan(b.createdAt, conf) > lim) return false;   // admin approved too long after the booking was made
+  return daysSpan(conf, now) <= lim;                                        // cancelled too long after the admin approved
+};
 const SLIP_MAX_PDF = 650 * 1024;
 const fileToDataUrl = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Could not read the file.')); r.readAsDataURL(f); });
 function imgToJpeg(file, maxPx, q) {
