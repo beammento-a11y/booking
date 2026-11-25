@@ -1,10 +1,10 @@
 /* Admin → Mock Tests. Loaded AFTER admin-rentals.js. The admin adds mock test TIME SLOTS (with seats, like the exam), students request a slot from exam.html,
    and here the admin approves / rejects, sends the WhatsApp message and edits the instructions, terms and WhatsApp texts. Uses the "Registrations" permission. */
-var mkBookings = [], mkSlots = [], mkCfg = {}, mkTab = 'pending', mkFirst = true, mkLastDate = '';
+var mkBookings = [], mkSlots = [], mkCfg = {}, mkTab = 'pending', mkFirst = true, mkLastDate = '', mkAvail = {}, mkAvailReady = false, mkBkReady = false;
 NAV.splice(NAV.findIndex(n => n.id === 'registrations') + 1, 0, { id: 'mock', icon: '📝', label: 'Mock Tests', perm: 'bookings' });
 
 const MK_DEF = {
-  enabled: true, maxDays: 60,
+  enabled: true, maxDays: 60, freeOn: true, openTime: '09:00', closeTime: '18:00', duration: 60,
   intro: 'Practise a one-to-one mock test at a time that suits you. Pick a date, choose a time slot and send your request. We will confirm it on WhatsApp.',
   instructions: 'Choose a date, then one of the time slots shown.\nYour request is only a request – it is confirmed when the admin approves it.\nAfter approval we will message you on WhatsApp.\nYou can see the approval on this page under “My Mock Test Requests”.',
   terms: 'Arrive (or log in) 15 minutes before your approved time.\nA mock test cannot be moved to another time on the same day.\nIf you cannot come, cancel your request or message us on WhatsApp early.\nThe admin may reject a request if needed.',
@@ -41,11 +41,24 @@ window.subscribe = function () {
   unsubs.push(db.collection('mockSlots').onSnapshot(s => { mkSlots = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
   unsubs.push(db.collection('mockBookings').onSnapshot(s => {
     if (!mkFirst) s.docChanges().forEach(c => { if (c.type === 'added' && c.doc.data().status === 'pending') toast('📝 New mock test request from ' + c.doc.data().name, 'ok'); });
-    mkFirst = false; mkBookings = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh();
+    mkFirst = false; mkBookings = s.docs.map(d => ({ id: d.id, ...d.data() })); mkBkReady = true; refresh(); mkSyncAvail();
   }, bad));
+  /* public copy of the APPROVED mock test times (no names / codes) – students use it to hide taken times on dates without time slots */
+  unsubs.push(db.collection('mockAvail').onSnapshot(s => { mkAvail = {}; s.docs.forEach(d => { mkAvail[d.id] = d.data().iv || {}; }); mkAvailReady = true; mkSyncAvail(); }, () => { /* not allowed / offline */ }));
 };
+/* keeps mockAvail equal to the approved mock tests (from today on). Runs after every change, so approving / cancelling / rejecting / deleting always updates it. */
+function mkSyncAvail() {
+  if (!mkAvailReady || !mkBkReady || !can('bookings')) return;
+  const today = todayStr(), want = {};
+  mkBookings.forEach(b => { if (b.status === 'approved' && b.date >= today && b.time && b.endTime) { const w = want[b.date] = want[b.date] || {}, k = b.time.replace(':', '') + '-' + b.endTime.replace(':', ''); w[k] = (w[k] || 0) + 1; } });
+  new Set([...Object.keys(want), ...Object.keys(mkAvail).filter(d => d >= today)]).forEach(d => {
+    const have = mkAvail[d] || {}, w = want[d] || {}, hk = Object.keys(have).filter(k => have[k] > 0);
+    if (hk.length === Object.keys(w).length && Object.keys(w).every(k => have[k] === w[k])) return;
+    db.collection('mockAvail').doc(d).set({ iv: w }).catch(() => { /* ignore – tried again after the next change */ });
+  });
+}
 const _mkStop = window.stopApp;
-window.stopApp = function () { mkBookings = []; mkSlots = []; mkCfg = {}; mkFirst = true; _mkStop(); };
+window.stopApp = function () { mkBookings = []; mkSlots = []; mkCfg = {}; mkFirst = true; mkAvail = {}; mkAvailReady = false; mkBkReady = false; _mkStop(); };
 
 /* ---------- the page ---------- */
 views.mock = {
@@ -92,7 +105,7 @@ function mkSlotsHTML() {
   const today = todayStr(), up = mkSlots.filter(s => s.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)), past = mkSlots.length - up.length;
   const byDate = {}; up.forEach(s => (byDate[s.date] = byDate[s.date] || []).push(s));
   return `<div class="card box"><h3>Add a mock test time slot</h3>
-    <p class="help" style="margin-bottom:10px">Add as many slots as you need for a date (press “Add slot” again for the next one). Seats work like the exam: leave empty for unlimited seats. A seat is held as soon as a student sends a request and is given back if the request is rejected or cancelled.</p>
+    <p class="help" style="margin-bottom:10px"><b>Time slots are optional.</b> On a date that has slots, students can only pick those slots. On a date with NO slots, students see the available times of the system (set in “Instructions, terms &amp; WhatsApp”), without the times of approved mock tests and simulation exams. Add as many slots as you need for a date (press “Add slot” again for the next one). Seats are optional too – leave empty for unlimited seats. A seat is held as soon as a student sends a request and is given back if the request is rejected or cancelled.</p>
     <div class="fr"><div class="field"><label>Date</label><input id="msDate" type="date" min="${today}" value="${esc(mkLastDate)}"/></div>
       <div class="field"><label>Start time</label><input id="msStart" type="time"/></div>
       <div class="field"><label>End time</label><input id="msEnd" type="time"/></div>
@@ -102,7 +115,7 @@ function mkSlotsHTML() {
       const act = mkActive(s), pend = act.filter(b => b.status === 'pending').length, apr = act.length - pend, cap = s.capacity == null ? 'No limit' : (s.booked || 0) + ' / ' + s.capacity;
       return `<tr><td><b>${fmtTime(s.time)} – ${fmtTime(s.endTime)}</b></td><td>${cap}${s.capacity != null && (s.booked || 0) >= s.capacity ? ' <span class="badge b-red">Full</span>' : ''}</td><td>${pend ? `<span class="badge b-warn">${pend} waiting</span> ` : ''}${apr ? `<span class="badge b-ok">${apr} approved</span>` : ''}${!pend && !apr ? '<span class="muted">—</span>' : ''}</td>
         <td><div class="acts"><button class="btn btn-ghost btn-sm" data-act="mkSlotEdit" data-id="${s.id}">Edit</button><button class="btn btn-danger btn-sm" data-act="mkSlotDel" data-id="${s.id}">Delete</button></div></td></tr>`;
-    }).join('')}</tbody></table></div></div>`).join('') : '<div class="card box"><div class="empty">No upcoming mock test slots. Add one above – students can only request a mock test in the slots you add.</div></div>'}
+    }).join('')}</tbody></table></div></div>`).join('') : `<div class="card box"><div class="empty">No upcoming mock test slots. ${mkC().freeOn === false ? 'Add one above – students can only request a mock test in the slots you add.' : 'That is fine – slots are optional. Students will see the available times of the system on every date.'}</div></div>`}
     ${past ? `<p class="muted" style="font-size:12.5px">${past} past slot(s) are hidden.</p>` : ''}`;
 }
 A.mkSlotAdd = (d, btn) => run(btn, async () => {
@@ -145,6 +158,10 @@ function mkSettingsHTML() {
   return `<div class="card box"><h3>Mock test settings</h3>
     <div class="row2"><div class="field"><label>Students can book mock tests</label><select id="mkOn"><option value="1" ${c.enabled !== false ? 'selected' : ''}>Yes – button visible</option><option value="0" ${c.enabled === false ? 'selected' : ''}>No – hide the button</option></select></div>
       ${f('mkMax', 'How many days ahead can students book', c.maxDays, 'number')}</div>
+    <div class="row2"><div class="field"><label>Dates WITHOUT time slots</label><select id="mkFree"><option value="1" ${c.freeOn !== false ? 'selected' : ''}>Show the available times (system)</option><option value="0" ${c.freeOn === false ? 'selected' : ''}>Students can only use the time slots I add</option></select></div>
+      ${f('mkDur', 'Mock test length in minutes (for available times)', c.duration, 'number')}</div>
+    <div class="row2">${f('mkOpen', 'Available times start from', c.openTime, 'time')}${f('mkClose', 'Last mock test must finish by', c.closeTime, 'time')}</div>
+    <p class="help" style="margin:-4px 0 12px">Used only for dates where you did NOT add time slots. Times of approved mock tests and simulation exams are never shown.</p>
     ${ta('mkIntro', 'Short introduction (top of the form)', c.intro, '', 60)}
     ${ta('mkIns', 'Instructions shown in the form (one per line)', c.instructions, 'Each line becomes one point.', 110)}
     ${ta('mkTerms', 'Terms shown in the form (one per line)', c.terms, 'Students must tick “I agree” before sending a request.', 110)}</div>
@@ -158,7 +175,10 @@ function mkSettingsHTML() {
 A.mkTab = d => { mkTab = d.t; views.mock.paint(); };
 A.mkSave = (d, btn) => run(btn, async () => {
   const v = id => $('#' + id).value, n = Number(v('mkMax'));
+  const dn = Math.round(Number(v('mkDur'))), op = v('mkOpen') || '09:00', cl = v('mkClose') || '18:00';
+  if (mkMin(cl) <= mkMin(op)) throw new Error('“Last mock test must finish by” must be later than the start time.');
   const data = { enabled: v('mkOn') === '1', maxDays: Number.isFinite(n) && n >= 1 && n <= 365 ? Math.round(n) : 60,
+    freeOn: v('mkFree') === '1', openTime: op, closeTime: cl, duration: dn >= 15 && dn <= 480 ? dn : 60,
     intro: v('mkIntro').trim(), instructions: v('mkIns').trim(), terms: v('mkTerms').trim(), waApproved: v('mkWaA').trim(), waExtras: v('mkWaX').trim(), waRejected: v('mkWaR').trim(), updatedAt: Date.now() };
   await db.collection('settings').doc('mock').set(data, { merge: true }); mkCfg = Object.assign({}, mkCfg, data); toast('Saved', 'ok');
 });
@@ -182,6 +202,8 @@ A.mkApprove = d => {
     <div class="field"><label>Note for the student (shown on their page and added to the WhatsApp message)</label><textarea id="apNote" style="min-height:90px">${esc(c.waExtras)}</textarea></div>
     <button class="btn btn-primary btn-block" id="apOk">✔ Approve</button>`);
   m.$('#apOk').onclick = () => run(m.$('#apOk'), async () => {
+    const clash = !b.slotId && mkBookings.find(x => x.id !== b.id && x.status === 'approved' && x.date === b.date && mkMin(b.time) < mkMin(x.endTime) && mkMin(b.endTime) > mkMin(x.time));
+    if (clash && !await confirmBox('This time overlaps the approved mock test of <b>' + esc(clash.name) + '</b> (' + fmtTime(clash.time) + ' – ' + fmtTime(clash.endTime) + '). Approve anyway?', { okText: 'Approve anyway', title: 'Time already booked' })) return;
     await mkSetStatus(b, { status: 'approved', approvedNote: m.$('#apNote').value.trim(), decidedAt: Date.now(), decidedBy: me.name || me.email }, false);
     m.close(); toast('Approved', 'ok'); mkWaModal(b, 'approved');
   });
