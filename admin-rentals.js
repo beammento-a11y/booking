@@ -41,8 +41,8 @@ const rHadSlip = b => b.cancelSlip != null ? !!b.cancelSlip : !!(b.paidClaim || 
 function rCancelProof(b) {
   if (b.status !== 'cancelled') return '';
   const by = b.cancelledBy === 'admin' ? 'organiser' : (b.cancelledBy === 'customer' ? 'customer' : 'unknown'), owes = Number(b.advanceDue) > 0, had = rHadSlip(b);
-  const badge = !owes ? '<span class="badge b-gray">No advance was due</span>' : (had ? '<span class="badge b-ok">Cancelled WITH slip</span>' : '<span class="badge b-red">Cancelled WITHOUT slip</span>');
-  return `<div style="font-size:12px;margin-top:6px;line-height:1.5">${badge}<br><span class="muted">by ${by}${b.cancelledAt ? ' · ' + fWhen(b.cancelledAt) : ''}</span>${owes && !had && b.cancelAck ? '<br><span class="muted">Customer accepted the no-slip / no-refund warning</span>' : ''}${b.cancelSlip == null ? '<br><span class="muted">(older booking – worked out from the slip records)</span>' : ''}</div>`;
+  const badge = b.payMode === 'center' ? '<span class="badge b-gray">Pay-at-centre booking (no slip)</span>' : !owes ? '<span class="badge b-gray">No advance was due</span>' : (had ? '<span class="badge b-ok">Cancelled WITH slip</span>' : '<span class="badge b-red">Cancelled WITHOUT slip</span>');
+  return `<div style="font-size:12px;margin-top:6px;line-height:1.5">${badge}<br><span class="muted">by ${by}${b.cancelledAt ? ' · ' + fWhen(b.cancelledAt) : ''}</span>${owes && !had && b.cancelAck && b.payMode !== 'center' ? '<br><span class="muted">Customer accepted the no-slip / no-refund warning</span>' : ''}${b.cancelSlip == null ? '<br><span class="muted">(older booking – worked out from the slip records)</span>' : ''}</div>`;
 }
 function rPayCell(b) {
   const pi = payInfo(b), sy = rSys(b); let h = '';
@@ -52,7 +52,14 @@ function rPayCell(b) {
     <div>Advance <b>${rs(pi.advance)}</b> ${adv}${(() => { const e = sy ? advanceOf(sy, b.advancePct || 50) : null; return e != null && !b.advanceVerified && e !== b.advanceDue && b.advanceDue > 0 ? ` <span class="badge b-red" title="Advance recalculated from the current rates">⚠ should be ${rs(e)}</span>` : ''; })()}</div>
     <div>Balance <b>${rs(pi.balance)}</b> ${bal}</div><div class="muted">Received ${rs(pi.received)} · To collect ${rs(pi.due)}</div></div>`;
   const acts = [];
-  if (b.status === 'pending') {
+  if (b.payMode === 'center') {   // bank transfer was OFF for this venue: no slips – approve, then record what was paid at the centre
+    acts.push('<span class="badge b-blue">🏢 Pay at centre</span>');
+    if (b.status === 'pending') acts.push(`<button class="btn btn-primary btn-sm" data-act="rentApproveCenter" data-id="${b.id}">✔ Approve booking</button>`);
+    else if (b.status === 'confirmed' && !b.closed) {
+      if (!b.advanceVerified) acts.push(`<button class="btn btn-primary btn-sm" data-act="rentConfirm" data-id="${b.id}">💵 Record advance received</button>`);
+      else if (pi.balance > 0) acts.push(`<button class="btn btn-primary btn-sm" data-act="rentBalance" data-id="${b.id}">💵 Record balance received</button>`);
+    }
+  } else if (b.status === 'pending') {
     if (b.advanceDue > 0 && !b.slipAt) acts.push(`<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${rWaTo(b, 'Hi ' + b.name + ', this is Mentobeam. To verify your advance payment (' + rs(b.advanceDue) + ') for ' + b.spaceName + ' on ' + fmtDate(b.date) + ', please attach your bank transfer slip: open ' + rSiteBase() + b.spaceId + '.html > My bookings > Attach advance slip. Booking code: ' + b.id)}">🔔 Remind to attach slip</a>`);
     else { if (b.slipAt) acts.push(`<button class="btn btn-ghost btn-sm" data-act="rentSlip" data-id="${b.id}">👁 View advance slip</button>`); acts.push(`<button class="btn btn-primary btn-sm" data-act="rentConfirm" data-id="${b.id}">✔ Confirm booking</button>`); }
   } else if (b.status === 'confirmed' && !b.closed) {
@@ -147,11 +154,12 @@ views.rentals = {
 };
 function rSpacesHTML() {
   const miss = DEF_SPACES.filter(d => !rDoc(d.id)).length;
-  return (miss ? `<div class="notice" style="margin-bottom:12px">${miss} space(s) are still using the built-in brochure data. <button class="btn btn-blue btn-sm" data-act="rentSeed">Save them to the database</button></div>` : '') + `<p class="muted" style="margin-bottom:12px">Turn a space on or off for booking. When off, visitors can still open the card to see the packages, but they cannot book.</p>` + rMerged().map(s => {
+  return (miss ? `<div class="notice" style="margin-bottom:12px">${miss} space(s) are still using the built-in brochure data. <button class="btn btn-blue btn-sm" data-act="rentSeed">Save them to the database</button></div>` : '') + `<p class="muted" style="margin-bottom:12px">Turn a space on or off for booking. When off, visitors can still open the card to see the packages, but they cannot book. <b>Bank transfer</b> ON = the customer pays the advance by bank transfer and attaches a slip (normal). OFF = the booking is placed normally and, after you approve it, the customer is asked to come to the centre to pay the advance and balance.</p>` + rMerged().map(s => {
     const has = !!rDoc(s.id);
     return `<div class="card box"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
-      <div><h3 style="margin:0">${s.icon || ''} ${esc(s.name)} ${s.available ? '<span class="badge b-ok">Available</span>' : '<span class="badge b-gray">Disabled</span>'}</h3><div class="muted" style="font-size:13px;margin-top:2px">${esc(s.tagline || '')}${has ? '' : ' · <b>using default data</b>'}</div></div>
+      <div><h3 style="margin:0">${s.icon || ''} ${esc(s.name)} ${s.available ? '<span class="badge b-ok">Available</span>' : '<span class="badge b-gray">Disabled</span>'} ${s.bankPay === false ? '<span class="badge b-warn">Pay at centre</span>' : ''}</h3><div class="muted" style="font-size:13px;margin-top:2px">${esc(s.tagline || '')}${has ? '' : ' · <b>using default data</b>'}</div></div>
       <div class="acts"><button class="btn ${s.available ? 'btn-danger' : 'btn-primary'} btn-sm" data-act="rentToggle" data-id="${s.id}">${s.available ? 'Disable booking' : 'Enable booking'}</button>
+      <button class="btn ${s.bankPay === false ? 'btn-ghost' : 'btn-blue'} btn-sm" data-act="rentBank" data-id="${s.id}" title="ON: customers pay the advance by bank transfer and attach a slip. OFF: customers pay the advance and balance at the centre after you approve.">${s.bankPay === false ? '🏢 Bank transfer: OFF' : '🏦 Bank transfer: ON'}</button>
       <button class="btn btn-blue btn-sm" data-act="rentEdit" data-id="${s.id}">✎ Edit details & rates</button><a class="btn btn-ghost btn-sm" href="${s.id}.html" target="_blank">Open page ↗</a></div></div>
       <div class="tw" style="margin-top:12px"><table><thead><tr><th>Package</th><th>Rate</th><th>Note</th></tr></thead><tbody>${s.packages.map(p => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(pkgPrice(p))} <span class="muted">${esc(p.unit || '')}</span></td><td>${esc(p.note || '')}</td></tr>`).join('')}
       ${s.extras.map(x => `<tr><td>＋ ${esc(x.name)}</td><td>${esc(exLabel(x))}</td><td class="muted">extra</td></tr>`).join('')}</tbody></table></div></div>`;
@@ -258,6 +266,12 @@ A.rentToggle = d => run(null, async () => {
   if (!(rDoc(d.id) && rDoc(d.id).photos && rDoc(d.id).photos.length)) delete o.photos;
   await db.collection('spaces').doc(d.id).set(o, { merge: true }); toast(s.name + (on ? ' is now available for booking' : ' is disabled'), 'ok'); sheetRentSpaces(s.name + ': booking ' + (on ? 'ENABLED' : 'DISABLED'));
 });
+A.rentBank = d => run(null, async () => {
+  const s = rMerged().find(x => x.id === d.id), on = s.bankPay === false, o = JSON.parse(JSON.stringify(s)); o.bankPay = on; o.updatedAt = Date.now();
+  if (!(rDoc(d.id) && rDoc(d.id).photos && rDoc(d.id).photos.length)) delete o.photos;
+  await db.collection('spaces').doc(d.id).set(o, { merge: true });
+  toast(s.name + (on ? ': bank transfer is ON (customers pay by bank transfer + slip)' : ': bank transfer is OFF – customers will pay at the centre after you approve'), 'ok');
+});
 A.rentEdit = d => {
   const s = JSON.parse(JSON.stringify(rMerged().find(x => x.id === d.id))), dd = rDoc(d.id);
   ed = { id: d.id, sp: s, photos: (dd && dd.photos) ? dd.photos.slice() : [], m: null };
@@ -299,20 +313,26 @@ async function rSetStatus(id, status, extra) {
 }
 C.rentStatus = el => {
   const b = rentBookings.find(x => x.id === el.dataset.id), v = el.value;
+  if (v === 'confirmed' && b && b.payMode === 'center' && b.status === 'pending') { views.rentals.paint(); return A.rentApproveCenter({ id: b.id }); }   // pay-at-centre: approving does not need a slip
   if (v === 'confirmed' && b && !b.advanceVerified && b.status === 'pending') { views.rentals.paint(); return A.rentConfirm({ id: b.id }); }   // confirming always goes through the slip check
   if (v === 'completed' && b && !b.closed) { views.rentals.paint(); return A.rentBalance({ id: b.id }); }                                       // completing = collecting the balance
   run(null, async () => { await rSetStatus(el.dataset.id, v, v === 'cancelled' ? { cancelledBy: 'admin', cancelledAt: Date.now(), cancelSlip: !!(b && (b.paidClaim || b.advanceVerified)) } : null); toast('Status: ' + v, 'ok'); });
 };
 const rNum = v => Math.max(0, Math.round(Number(v) || 0));
+A.rentApproveCenter = async d => {
+  const b = rentBookings.find(x => x.id === d.id); if (!b) return;
+  if (!await confirmBox('Approve the booking of <b>' + esc(b.name) + '</b> for ' + fmtDate(b.date) + '? The customer will see that they must come to the centre to pay the advance and the balance (with a Get directions button).', { okText: 'Approve', title: 'Approve booking?' })) return;
+  run(null, async () => { await rSetStatus(b.id, 'confirmed', { centerApproved: true, approvedAt: Date.now() }); toast('Approved – the customer is asked to pay at the centre', 'ok'); });
+};
 A.rentConfirm = d => {
   const b = rentBookings.find(x => x.id === d.id); if (!b) return;
-  const needs = b.advanceDue > 0 && !b.advanceVerified;
+  const ctr = b.payMode === 'center', needs = !ctr && b.advanceDue > 0 && !b.advanceVerified;
   if (needs && !b.slipAt) { toast('No payment slip yet – use “Remind to attach slip”', 'err'); return; }
   const pi = payInfo(b), sy = rSys(b), t0 = pi.total || sy || 0;
-  const m = modal(`<h2 class="mh">Confirm booking</h2><p class="msub">${esc(b.name)} · ${esc(b.spaceName)} · ${fmtDate(b.date)}</p>
+  const m = modal(`<h2 class="mh">${ctr ? 'Record advance received at the centre' : 'Confirm booking'}</h2><p class="msub">${esc(b.name)} · ${esc(b.spaceName)} · ${fmtDate(b.date)}</p>
     <div class="row2"><div class="field"><label>Final total (Rs)</label><input id="cfTotal" type="number" min="0" value="${t0}"/></div><div class="field"><label>Advance received (Rs)</label><input id="cfAdv" type="number" min="0" value="${b.advanceDue || 0}"/></div></div>
     <div class="notice" id="cfBal"></div>${needs ? '<p class="help" style="margin-top:8px">The payment slip will be <b>downloaded to this device</b> and then <b>deleted from the database</b> to free space.</p>' : ''}
-    <div class="err" id="cfErr"></div><button class="btn btn-primary btn-block" id="cfGo" style="margin-top:10px">✔ Confirm booking</button>`);
+    <div class="err" id="cfErr"></div><button class="btn btn-primary btn-block" id="cfGo" style="margin-top:10px">${ctr ? '✔ Save payment' : '✔ Confirm booking'}</button>`);
   const calc = () => { const t = rNum(m.$('#cfTotal').value), a = rNum(m.$('#cfAdv').value); m.$('#cfBal').innerHTML = 'Balance to collect on the day: <b>' + rs(Math.max(0, t - a)) + '</b>'; }; calc();
   m.$('#cfTotal').oninput = m.$('#cfAdv').oninput = calc;
   m.$('#cfGo').onclick = () => {
