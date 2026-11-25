@@ -488,11 +488,12 @@ async function lookupCode() {
 
 /* ---------------- MOCK TEST (a separate request form – the admin adds the time slots + seats and approves each request) ---------------- */
 const MK_DEF = {
-  enabled: true, maxDays: 60,
+  enabled: true, maxDays: 60, freeOn: true, openTime: '09:00', closeTime: '18:00', duration: 60,   // freeOn: dates WITHOUT admin time slots show the available times of the system
   intro: 'Practise a one-to-one mock test at a time that suits you. Pick a date, choose a time slot and send your request. We will confirm it on WhatsApp.',
   instructions: 'Choose a date, then one of the time slots shown.\nYour request is only a request – it is confirmed when the admin approves it.\nAfter approval we will message you on WhatsApp.\nYou can see the approval on this page under “My Mock Test Requests”.',
   terms: 'Arrive (or log in) 15 minutes before your approved time.\nA mock test cannot be moved to another time on the same day.\nIf you cannot come, cancel your request or message us on WhatsApp early.\nThe admin may reject a request if needed.'
 };
+let mockAvailIv = {}, mockAvailFor = '', mockAvailOff = null;   // approved mock test times of the chosen date (public, no names): { '0900-1000': 1 }
 let mock = Object.assign({}, MK_DEF), mockSlots = [], mockIds = JSON.parse(localStorage.getItem('mb_mock') || '[]'), mockDocs = {}, mockSubs = {}, mockModal = null, mockSel = null, mockDate = '';
 const mkMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
 const mkLines = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
@@ -505,21 +506,40 @@ async function loadMock() {
   db.collection('mockSlots').where('date', '>=', todayStr()).orderBy('date').onSnapshot(sn => { mockSlots = sn.docs.map(d => ({ id: d.id, ...d.data() })); if (mockModal) mockRenderInfo(); }, () => { /* slots could not be read */ });
   mockIds.forEach(watchMock); renderMock();
 }
+const mkStr = m => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+const mkHM = k => mkMin(k.slice(0, 2) + ':' + k.slice(2));
+const mockDur = () => Math.max(15, Math.min(480, Math.round(Number(mock.duration)) || 60));
+/* the available times of a date that has NO admin-made time slots: opening hours minus approved mock tests and simulation exams (and times already past) */
+function mockFreeTimes(date) {
+  if (!date || mock.freeOn === false) return [];
+  const open = mkMin(mock.openTime || '09:00'), close = mkMin(mock.closeTime || '18:00'), dur = mockDur(), busy = [], now = Date.now(), out = [];
+  Object.keys(mockAvailIv || {}).forEach(k => { if ((mockAvailIv[k] || 0) > 0 && /^\d{4}-\d{4}$/.test(k)) busy.push([mkHM(k.slice(0, 4)), mkHM(k.slice(5))]); });
+  slots.filter(x => x.date === date).forEach(x => busy.push([mkMin(x.time), mkMin(x.endTime || addMinutes(x.time, 120))]));
+  for (let m = open; m + dur <= close; m += 30) { if (ts(date, mkStr(m)) <= now) continue; if (busy.some(b => m < b[1] && m + dur > b[0])) continue; out.push(mkStr(m)); }
+  return out;
+}
+function watchMockAvail(date) {
+  if (mockAvailFor === date) return; if (mockAvailOff) { mockAvailOff(); mockAvailOff = null; } mockAvailFor = date; mockAvailIv = {}; if (!date) return;
+  mockAvailOff = db.collection('mockAvail').doc(date).onSnapshot(sn => { if (mockAvailFor !== date) return; mockAvailIv = sn.exists ? (sn.data().iv || {}) : {}; if (mockModal) mockRenderInfo(); }, () => { /* keep what we have */ });
+}
 const mockSlotsOf = date => mockSlots.filter(s => s.date === date).sort((a, b) => a.time.localeCompare(b.time));
 function mockRenderInfo() {
   const box = mockModal && mockModal.$('#mkInfo'); if (!box) return;
   const now = Date.now(), maxD = dstr(new Date(now + (Number(mock.maxDays) || 60) * 86400000));
   const openDates = [...new Set(mockSlots.filter(s => s.date <= maxD && slotStatus(s, null, now) === 'open').map(s => s.date))].sort().slice(0, 14);
-  const chips = openDates.length ? `<h5>Dates with mock test time slots</h5>${openDates.map(d => `<button type="button" class="mk-chip mk-pick ${d === mockDate ? 'on' : ''}" data-d="${d}">${fmtDate(d, true)}</button>`).join('')}` : '<p class="help">No mock test time slots are open right now. Please check again soon.</p>';
+  const freeOn = mock.freeOn !== false;
+  const chips = openDates.length ? `<h5>Dates with mock test time slots</h5>${openDates.map(d => `<button type="button" class="mk-chip mk-pick ${d === mockDate ? 'on' : ''}" data-d="${d}">${fmtDate(d, true)}</button>`).join('')}` : (freeOn ? '' : '<p class="help">No mock test time slots are open right now. Please check again soon.</p>');
   let body = '';
-  if (!mockDate) body = openDates.length ? '<p class="help" style="margin-top:8px">Pick a date above (or use the calendar below) to see the time slots.</p>' : '';
+  watchMockAvail(mockDate);
+  if (!mockDate) body = openDates.length ? '<p class="help" style="margin-top:8px">Pick a date above (or use the calendar below) to see the available times.</p>' : (freeOn ? '<p class="help">Pick a date to see the available times.</p>' : '');
   else {
-    const ex = slots.filter(s => s.date === mockDate).sort((a, b) => a.time.localeCompare(b.time)), sl = mockSlotsOf(mockDate);
-    if (mockSel && !sl.some(s => s.id === mockSel && slotStatus(s, null, now) === 'open')) mockSel = null;
+    const ex = slots.filter(s => s.date === mockDate).sort((a, b) => a.time.localeCompare(b.time)), sl = mockSlotsOf(mockDate), free = sl.length ? [] : mockFreeTimes(mockDate);
+    if (mockSel && String(mockSel).startsWith('free:') ? !free.includes(String(mockSel).slice(5)) : (mockSel && !sl.some(s => s.id === mockSel && slotStatus(s, null, now) === 'open'))) mockSel = null;
     body = `<h5>📅 ${fmtDate(mockDate)}</h5>
       <h5>Simulation exams on this day</h5>${ex.length ? ex.map(s => { const d = dates.find(x => x.id === s.dateId); return `<span class="mk-chip ex">${esc((d && d.title) || 'PTE Simulation Exam')} · ${mkRange(s.time, s.endTime || addMinutes(s.time, 120))}</span>`; }).join('') : '<span class="muted" style="font-size:13px">No simulation exam on this day</span>'}
-      <h5>Mock test time slots</h5>
-      ${sl.length ? sl.map(s => {
+      <h5>${sl.length || !freeOn ? 'Mock test time slots' : 'Available times'}</h5>
+      ${!sl.length && freeOn ? (free.length ? free.map(t => `<div class="so ${mockSel === 'free:' + t ? 'sel' : ''}" data-id="free:${t}" data-can="1"><span class="dot"></span><span class="t">${mkRange(t, addMinutes(t, mockDur()))}</span><span class="s" style="color:var(--ok)">Available</span></div>`).join('') : '<div class="empty" style="padding:14px">No available times on this day. Please choose another date.</div>')
+      : sl.length ? sl.map(s => {
         const stt = slotStatus(s, null, now), si = seatInfo(s), can = stt === 'open';
         const label = stt === 'full' ? 'Full' : stt === 'started' ? 'Started' : si.text;
         const col = can ? (!si.unlimited && si.left <= 2 ? 'var(--red)' : 'var(--ok)') : 'var(--muted)';
@@ -550,7 +570,7 @@ function openMock() {
       <label class="mk-agree"><input type="checkbox" id="mAgree"/><span>I have read the instructions and I agree to the terms.</span></label>
       <div class="err" id="mkErr"></div>
       <button class="btn btn-primary btn-block btn-lg" id="mkBtn" type="submit">Send mock test request</button>
-    </form>`, { onClose: () => { mockModal = null; } });
+    </form>`, { onClose: () => { mockModal = null; watchMockAvail(''); } });
   const saved = JSON.parse(localStorage.getItem('mb_profile') || '{}');
   if (saved.name) mockModal.$('#mName').value = saved.name;
   if (saved.email) mockModal.$('#mEmail').value = saved.email;
@@ -567,16 +587,20 @@ async function submitMock() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return; }
   if (!/^[+\d][\d\s\-]{6,18}$/.test(phone)) { err.textContent = 'Please enter a valid phone number.'; return; }
   if (!mockDate) { err.textContent = 'Please choose a date.'; return; }
-  const s = mockSlots.find(x => x.id === mockSel);
-  if (!s) { err.textContent = 'Please choose one of the time slots.'; return; }
+  const isFree = String(mockSel || '').startsWith('free:'), ft = isFree ? String(mockSel).slice(5) : '';
+  const s = isFree ? null : mockSlots.find(x => x.id === mockSel);
+  if (!s && !isFree) { err.textContent = mockSlotsOf(mockDate).length || mock.freeOn === false ? 'Please choose one of the time slots.' : 'Please choose one of the available times.'; return; }
+  if (isFree && !mockFreeTimes(mockDate).includes(ft)) { err.textContent = 'That time is no longer available. Please choose another one.'; mockSel = null; mockRenderInfo(); return; }
   if (!m.$('#mAgree').checked) { err.textContent = 'Please tick “I agree” to send your request.'; return; }
-  if (Object.values(mockDocs).some(b => b && b.slotId === s.id && ['pending', 'approved'].includes(b.status))) { err.textContent = 'You already requested this time slot on this device.'; return; }
+  if (Object.values(mockDocs).some(b => b && ['pending', 'approved'].includes(b.status) && (isFree ? (!b.slotId && b.date === mockDate && b.time === ft) : b.slotId === s.id))) { err.textContent = 'You already requested this time slot on this device.'; return; }
   const btn = m.$('#mkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
-  const dur = Math.max(15, mkMin(s.endTime) - mkMin(s.time)) || 60;
-  const data = { slotId: s.id, name, email, phone, date: s.date, time: s.time, endTime: s.endTime, duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
+  const dur = isFree ? mockDur() : (Math.max(15, mkMin(s.endTime) - mkMin(s.time)) || 60);
+  const data = isFree ? { name, email, phone, date: mockDate, time: ft, endTime: addMinutes(ft, dur), duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() }
+    : { slotId: s.id, name, email, phone, date: s.date, time: s.time, endTime: s.endTime, duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
   const bref = db.collection('mockBookings').doc();
   try {
-    await db.runTransaction(async tx => {                                   // the seat is taken in the same transaction (like the exam)
+    if (isFree) await bref.set(data);                                       // no admin time slot for this date: a plain request for one of the available times (the admin approves it)
+    else await db.runTransaction(async tx => {                              // the seat is taken in the same transaction (like the exam)
       const sref = db.collection('mockSlots').doc(s.id), snap = await tx.get(sref);
       if (!snap.exists) throw new Error('This time slot is no longer available.');
       const sd = snap.data();
