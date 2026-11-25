@@ -248,8 +248,15 @@ function centerPayLine(b) {
   }
   return h;
 }
+function refundLines(b) {
+  let h = '';
+  if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours. We will message you on WhatsApp.</div>`;
+  if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0))} – please check your bank account.</div>`;
+  if (b.refundStatus === 'rejected') h += `<div class="rn-pl"><span class="badge b-red">Refund not approved</span> ${esc(b.refundRejectReason || '')}</div>`;
+  return h;
+}
 function payLine(b) {
-  if (b.payMode === 'center') return centerPayLine(b);
+  if (b.payMode === 'center') return centerPayLine(b) + refundLines(b);
   const pi = payInfo(b); let h = '';
   if (pi.total > 0 && b.status !== 'cancelled') {
     h += `<div class="rn-pl">Total <b>${rs(pi.total)}</b> · Advance ${rs(pi.advance)} ${pi.advPaid ? '<span class="badge b-ok">✓ paid</span>' : (b.slipAt ? '<span class="badge b-blue">slip received</span>' : (pi.advance > 0 ? '<span class="badge b-warn">slip not attached</span>' : ''))}</div>`;
@@ -258,18 +265,17 @@ function payLine(b) {
     if ((pi.advPaid || pi.advance === 0) && !pi.balPaid && pi.balance > 0 && !b.balanceSlipAt && b.status === 'confirmed') h += `<div class="rn-remind">Pay the balance <b>${rs(pi.balance)}</b> by bank transfer on or before your booking date, then attach the slip. <button class="btn btn-primary btn-sm" data-bal="${b.id}">Pay balance / attach slip</button></div>`;
   }
   if (b.status === 'cancelled' && b.cancelledBy === 'customer' && b.cancelSlip === false && Number(b.advanceDue) > 0) h += `<div class="rn-pl"><span class="badge b-red">Cancelled without payment slip</span> No refund can be processed because no slip was attached.</div>`;
-  if (b.refundStatus === 'requested') h += `<div class="rn-pl"><span class="badge b-warn">Refund requested</span> ${rs(b.refundAmount || 0)} – to be paid within ${R.rental.refundHours || 48} hours. We will message you on WhatsApp.</div>`;
-  if (b.refundStatus === 'paid') h += `<div class="rn-pl"><span class="badge b-ok">✓ Refund paid</span> ${rs(b.refundPaidAmount != null ? b.refundPaidAmount : (b.refundAmount || 0))} – please check your bank account.</div>`;
-  if (b.refundStatus === 'rejected') h += `<div class="rn-pl"><span class="badge b-red">Refund not approved</span> ${esc(b.refundRejectReason || '')}</div>`;
+  h += refundLines(b);
   return h;
 }
 const adminPaid = b => b.advanceVerified || b.paidClaim;
+const centerPaid = b => !!b.advanceVerified;   // pay-at-centre booking: the admin recorded the advance received at the centre
 function renderMy() {
   const list = myIds.map(id => myDocs[id]).filter(b => b && b.spaceId === SID).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
   $('#my').hidden = !list.length; if (!list.length) return;
   $('#myList').innerHTML = list.map(b => {
-    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && b.payMode !== 'center' && adminPaid(b) && refundBase(b) > 0 && refundWithin(b, refundDays());
-    const askRefund = b.payMode !== 'center' && b.status === 'cancelled' && b.cancelledBy === 'admin' && !b.refundStatus && adminPaid(b) && refundBase(b) > 0;
+    const ctr = b.payMode === 'center', can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && (ctr ? centerPaid(b) : adminPaid(b)) && refundBase(b) > 0 && refundWithin(b, refundDays());
+    const askRefund = b.status === 'cancelled' && !b.refundStatus && refundBase(b) > 0 && (ctr ? (centerPaid(b) && (b.cancelledBy === 'admin' || (b.cancelledBy === 'customer' && refundWithin(b, refundDays(), b.cancelledAt)))) : (b.cancelledBy === 'admin' && adminPaid(b)));   // pay-at-centre: the advance counts once the admin recorded it at the centre
     return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
     <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}${askRefund ? `<br><button class="btn btn-primary btn-sm" style="margin-top:8px" data-rf="${b.id}">Request to refund</button>` : ''}</div></div>`; }).join('');
   $$('[data-c]').forEach(x => x.onclick = () => cancelMy(x.dataset.c));
@@ -306,6 +312,7 @@ function balanceStep(id) {
 }
 async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
+  if (b.payMode === 'center' && centerPaid(b) && refundBase(b) > 0 && refundWithin(b, refundDays())) return refundForm(b, true);   // advance already paid at the centre and still inside the refund period: cancel + refund request
   if (b.payMode === 'center') {   // paid (or to be paid) at the centre: no slip / online refund – any refund is handled with us directly
     if (!await confirmBox('Cancel this booking?' + (b.advanceVerified ? ' You already paid at our centre – please speak to us about any refund.' : ''), { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' })) return;
     return doCancel(b, !!(b.paidClaim || b.advanceVerified), true);
