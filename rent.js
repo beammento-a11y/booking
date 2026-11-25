@@ -58,7 +58,7 @@ function render() {
       <div class="field"><label>Email <span class="req">*</span></label><input id="fEmail" type="email" autocomplete="email"/></div>
       <div class="rn-est" id="est"></div><div class="err" id="fErr"></div>
       <button class="btn btn-primary btn-block btn-lg" id="fBtn" type="submit">Send booking request</button>
-      <p class="help" style="margin-top:8px">We confirm your date after reviewing the request. A 50% advance locks in the booking.</p></form>`
+      <p class="help" style="margin-top:8px">We confirm your date after reviewing the request. ${S.bankPay === false ? 'No online payment is needed – after we approve your booking, you pay the advance and the balance at our centre.' : 'A 50% advance locks in the booking.'}</p></form>`
       : `<div class="rn-closed">Bookings for this space are closed right now. Contact us on WhatsApp <b>${esc(R.rental.whatsapp || '')}</b> and we will help you.</div>`}
   </section>
   <section class="rn-sec" id="my" hidden><h2>My ${esc(S.name)} bookings</h2><div class="rn-my" id="myList"></div></section>
@@ -149,7 +149,7 @@ function collect() {
   const est2 = e.lines.some(l => l[1] != null) ? e.total : 0, pct = advPct();
   return { spaceId: S.id, spaceName: S.name, packageId: v.p.id, packageName: v.p.name, date, startTime: start, endTime: v.hours ? addMinutes(start, v.hours * 60) : '', hours: v.hours, units: v.units, guests,
     layout: ($('#fLayout') || {}).value || '', extras: exList, extrasText: exList.map(x => x.name + (x.qty > 1 ? ' x' + x.qty : '')).join('; '),
-    estimate: est2, quoteItems: !!e.quote, advanceDue: advanceOf(est2, pct), advancePct: pct, paidClaim: false,
+    estimate: est2, quoteItems: !!e.quote, advanceDue: advanceOf(est2, pct), advancePct: pct, paidClaim: false, ...(S.bankPay === false ? { payMode: 'center' } : {}),
     name, email, phone, notes: $('#fNotes').value.trim().slice(0, 600), status: 'pending', createdAt: Date.now(), blocks: endT ? blocksOf(start, endT) : [] };
 }
 const advPct = () => Number(R.rental.advancePct) || 50;
@@ -163,6 +163,10 @@ async function submit() {
   const data = collect(); if (!data) return;
   if (data.advanceDue <= 0) {   // price is "on request" – nothing to pay yet
     if (!await confirmBox('The price for this booking is agreed with us first, so there is no advance to pay right now. We will contact you with the price and payment details.', { okText: 'Send request', title: 'Send booking request?' })) return;
+    return place(data, null, null);
+  }
+  if (S.bankPay === false) {   // bank transfer is switched OFF for this venue: place the booking normally, the advance + balance are paid at the centre after approval
+    if (!await confirmBox('Your booking request will be sent to us. <b>No online payment is needed.</b> After we approve it, please come to our centre to pay the advance (' + rs(data.advanceDue) + ') and the balance.', { okText: 'Send request', title: 'Send booking request?' })) return;
     return place(data, null, null);
   }
   if (!bankReady()) { modal(`<div class="rn-closed" style="margin:0">Online payment details are not available yet. Please contact us on WhatsApp <b>${esc(R.rental.whatsapp || '')}</b> to place this booking.</div><a class="btn btn-primary btn-block" style="margin-top:12px" target="_blank" rel="noopener" href="${waLink(R.rental.whatsapp, 'Hi, I would like to book ' + S.name + ' on ' + data.date)}">Message us on WhatsApp</a>`); return; }
@@ -212,7 +216,7 @@ async function place(data, slip, pm) {
   myIds.push(ref.id); localStorage.setItem('mb_rent', JSON.stringify(myIds)); myDocs[ref.id] = { id: ref.id, ...data }; renderMy(); watchMy(ref.id);
   if (pm) pm.close();
   const m = modal(`<div style="text-align:center"><div style="font-size:46px">✅</div><h2 class="mh" style="padding:0">Booking request placed!</h2>
-    <p class="msub">Thank you, ${esc(data.name.split(' ')[0])}. ${data.advanceDue > 0 ? (slip ? 'We received your payment slip and will verify it and confirm your booking.' : 'Please attach your payment slip from “My bookings” so we can verify your payment and confirm.') : 'We will contact you with the price and payment details.'}</p>
+    <p class="msub">Thank you, ${esc(data.name.split(' ')[0])}. ${data.payMode === 'center' ? 'We will review your booking. Once we approve it, you will see it under “My bookings” – please come to our centre to pay the advance and the balance.' : data.advanceDue > 0 ? (slip ? 'We received your payment slip and will verify it and confirm your booking.' : 'Please attach your payment slip from “My bookings” so we can verify your payment and confirm.') : 'We will contact you with the price and payment details.'}</p>
     <p><b>${esc(S.name)}</b> · ${esc(data.packageName)}<br>${fmtDate(data.date)}${data.endTime ? ' · ' + fmtTime(data.startTime) + ' – ' + fmtTime(data.endTime) : ''}</p><p class="help" style="margin:8px 0">Booking code: <span style="font-family:monospace">${ref.id}</span></p>
     <a class="btn btn-ghost btn-block" target="_blank" rel="noopener" href="${waNote(ref.id)}">Message us on WhatsApp</a><button class="btn btn-blue btn-block" style="margin-top:8px" id="okd">Done</button></div>`);
   m.$('#okd').onclick = () => { m.close(); location.hash = '#my'; };
@@ -228,7 +232,24 @@ function watchMy(id) {
     e => { myDocs[id] = myDocs[id] || undefined; renderMy(); });
 }
 function loadMy() { myIds.forEach(watchMy); renderMy(); }
+const mapsLink = a => 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(a);
+/* bookings of a venue whose bank transfer is OFF: no slips – after the admin approves, the customer is asked to pay at the centre (with a Get directions button) */
+function centerPayLine(b) {
+  const pi = payInfo(b); let h = '';
+  if (b.status === 'cancelled') return '';
+  if (pi.total > 0) {
+    h += `<div class="rn-pl">Total <b>${rs(pi.total)}</b> · Advance ${rs(pi.advance)} ${pi.advPaid ? '<span class="badge b-ok">✓ paid</span>' : '<span class="badge b-warn">pay at our centre</span>'}</div>`;
+    h += `<div class="rn-pl">Balance <b>${rs(pi.balance)}</b> ${pi.balPaid ? '<span class="badge b-ok">✓ paid – transaction closed</span>' : '<span class="badge b-warn">pay at our centre</span>'}</div>`;
+  }
+  if (b.status === 'pending') h += '<div class="rn-pl">⏳ We will review your booking. Once approved, please come to our centre to pay the advance and the balance.</div>';
+  else if (b.status === 'confirmed' && !pi.closed && !pi.balPaid) {
+    const adr = String(R.rental.address || '').trim();
+    h += `<div class="rn-remind"><div>✅ <b>Your booking is approved.</b> Please come to our centre to pay the advance and the balance${adr ? ':<br><b>' + esc(adr) + '</b>' : '.'}</div>${adr ? `<a class="btn btn-primary btn-sm" target="_blank" rel="noopener" href="${mapsLink(adr)}">📍 Get directions</a>` : ''}</div>`;
+  }
+  return h;
+}
 function payLine(b) {
+  if (b.payMode === 'center') return centerPayLine(b);
   const pi = payInfo(b); let h = '';
   if (pi.total > 0 && b.status !== 'cancelled') {
     h += `<div class="rn-pl">Total <b>${rs(pi.total)}</b> · Advance ${rs(pi.advance)} ${pi.advPaid ? '<span class="badge b-ok">✓ paid</span>' : (b.slipAt ? '<span class="badge b-blue">slip received</span>' : (pi.advance > 0 ? '<span class="badge b-warn">slip not attached</span>' : ''))}</div>`;
@@ -247,8 +268,8 @@ function renderMy() {
   const list = myIds.map(id => myDocs[id]).filter(b => b && b.spaceId === SID).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
   $('#my').hidden = !list.length; if (!list.length) return;
   $('#myList').innerHTML = list.map(b => {
-    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && adminPaid(b) && refundBase(b) > 0 && refundWithin(b, refundDays());
-    const askRefund = b.status === 'cancelled' && b.cancelledBy === 'admin' && !b.refundStatus && adminPaid(b) && refundBase(b) > 0;
+    const can = (b.status === 'pending' || b.status === 'confirmed') && b.date >= todayStr() && !b.closed, refundable = can && b.payMode !== 'center' && adminPaid(b) && refundBase(b) > 0 && refundWithin(b, refundDays());
+    const askRefund = b.payMode !== 'center' && b.status === 'cancelled' && b.cancelledBy === 'admin' && !b.refundStatus && adminPaid(b) && refundBase(b) > 0;
     return `<div><div><b>${fmtDate(b.date)}</b>${b.endTime ? ' · ' + fmtTime(b.startTime) + ' – ' + fmtTime(b.endTime) : ''}<br><span class="muted">${esc(b.packageName)}</span><br><span style="font-family:monospace;font-size:11px;color:var(--muted)">${b.id}</span>${payLine(b)}</div>
     <div style="text-align:right">${stBadge(b.status)}${can ? `<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-c="${b.id}">${refundable ? 'Cancel and request refund' : 'Cancel booking'}</button>` : ''}${askRefund ? `<br><button class="btn btn-primary btn-sm" style="margin-top:8px" data-rf="${b.id}">Request to refund</button>` : ''}</div></div>`; }).join('');
   $$('[data-c]').forEach(x => x.onclick = () => cancelMy(x.dataset.c));
@@ -285,6 +306,10 @@ function balanceStep(id) {
 }
 async function cancelMy(id) {
   const b = myDocs[id]; if (!b) return;
+  if (b.payMode === 'center') {   // paid (or to be paid) at the centre: no slip / online refund – any refund is handled with us directly
+    if (!await confirmBox('Cancel this booking?' + (b.advanceVerified ? ' You already paid at our centre – please speak to us about any refund.' : ''), { okText: 'Yes, cancel', danger: true, title: 'Cancel this booking?' })) return;
+    return doCancel(b, !!(b.paidClaim || b.advanceVerified), true);
+  }
   const owes = Number(b.advanceDue) > 0, hasSlip = !!(b.paidClaim || b.advanceVerified);   // hasSlip = proof of payment is on file (the database rules check this too)
   const paid = adminPaid(b) && refundBase(b) > 0, refundable = paid && refundWithin(b, refundDays());
   if (refundable) return refundForm(b, true);
