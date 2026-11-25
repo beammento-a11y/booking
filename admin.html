@@ -1112,9 +1112,23 @@ const A = {
         const n = await repeatTopUp(false);
         toast(n ? 'Repeat is ON – ' + n + ' weekly exam date' + (n > 1 ? 's' : '') + ' created' : 'Repeat is ON', 'ok');
       } else {
-        const sid = cur.seriesId || cur.id;
-        await commitOps(dates.filter(x => (x.seriesId || x.id) === sid && x.repeatWeekly === true).map(x => ({ t: 'upd', ref: db.collection('examDates').doc(x.id), data: { repeatWeekly: false } })));
-        toast('Repeat is OFF – no more weekly dates will be created. Dates already created stay (delete any you do not need).', 'ok');
+        const sid = cur.seriesId || cur.id, today = todayStr();
+        const members = dates.filter(x => (x.seriesId || x.id) === sid && x.repeatWeekly === true);
+        // a date that hasn't happened yet and has no registrations is a date the auto-repeat created ahead of time -> remove it with its slots
+        const removable = members.filter(x => x.date >= today && regsOfDate(x.id).length === 0);
+        const removeIds = new Set(removable.map(x => x.id));
+        const keep = members.filter(x => !removeIds.has(x.id));
+        const ops = [
+          ...keep.map(x => ({ t: 'upd', ref: db.collection('examDates').doc(x.id), data: { repeatWeekly: false } })),
+          ...removable.reduce((acc, x) => acc.concat(
+            slotsOf(x.id).map(s => ({ t: 'del', ref: db.collection('slots').doc(s.id) })),
+            [{ t: 'del', ref: db.collection('examDates').doc(x.id) }]
+          ), [])
+        ];
+        await commitOps(ops);
+        toast(removable.length
+          ? 'Repeat is OFF – ' + removable.length + ' upcoming weekly date' + (removable.length > 1 ? 's' : '') + ' with no registrations removed' + (keep.length ? '; dates that already have registrations, or have already happened, were kept' : '')
+          : 'Repeat is OFF – no more weekly dates will be created. Dates already created stay (delete any you do not need).', 'ok');
       }
       setTimeout(rerenderPanel, 150);
     });
