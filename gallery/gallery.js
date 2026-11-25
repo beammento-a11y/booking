@@ -6,11 +6,11 @@
 
    Udaharana:
    window.GALLERY = [
-     'photo1.jpg',
+     'DSC07391.jpg',
      'photo2.jpg',
      { src: 'photo3.jpg', caption: 'Computer lab' }
    ];
 */
-window.GALLERY = [
+window.GALLERY = ['DSC07391.jpg','DSC07746.jpg','DSC07998.jpg','DSC08033.jpg','DSC078081.jpg',
   // 'photo1.jpg',
 ];
