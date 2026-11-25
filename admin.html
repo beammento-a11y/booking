@@ -409,6 +409,25 @@ async function repeatTopUp(quiet) {
   finally { _repBusy = false; }
   return made;
 }
+// when the admin turns "repeat every week" off, let them choose whether to remove the upcoming
+// auto-created dates (that have no registrations) now, or keep every date and remove any by hand later
+function chooseRepeatOff(removableCount, keepCount) {
+  return new Promise(res => {
+    const canRemove = removableCount > 0;
+    const m = modal(`<h2 class="mh">Turn off weekly repeat</h2>
+      <p class="msub" style="margin-top:8px">${canRemove
+        ? `${removableCount} upcoming date${removableCount > 1 ? 's' : ''} ${removableCount > 1 ? 'were' : 'was'} created automatically and have no registrations yet.${keepCount ? ' ' + keepCount + ' other date' + (keepCount > 1 ? 's' : '') + ' (already registered, or already happened) will stay either way.' : ''}`
+        : 'All the dates in this series already have registrations or have already happened, so none can be removed automatically. You can still delete any of them one by one from the calendar.'}</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        ${canRemove ? `<button class="btn btn-primary" id="roRemove">🗑 Remove the ${removableCount} empty upcoming date${removableCount > 1 ? 's' : ''} now</button>` : ''}
+        <button class="btn btn-blue" id="roKeep">Keep all dates – just turn repeat off</button>
+        <button class="btn btn-ghost" id="roCancel">Cancel</button>
+      </div>`, { onClose: () => res(null) });
+    if (canRemove) m.$('#roRemove').onclick = () => { res('remove'); m.el.remove(); if (!document.querySelector('.ov')) document.body.style.overflow = ''; };
+    m.$('#roKeep').onclick = () => { res('keep'); m.el.remove(); if (!document.querySelector('.ov')) document.body.style.overflow = ''; };
+    m.$('#roCancel').onclick = () => { m.close(); };
+  });
+}
 let _rf = 0;
 function refresh() {
   if (_rf) return;
@@ -1114,8 +1133,10 @@ const A = {
       } else {
         const sid = cur.seriesId || cur.id, today = todayStr();
         const members = dates.filter(x => (x.seriesId || x.id) === sid && x.repeatWeekly === true);
-        // a date that hasn't happened yet and has no registrations is a date the auto-repeat created ahead of time -> remove it with its slots
-        const removable = members.filter(x => x.date >= today && regsOfDate(x.id).length === 0);
+        const emptyFuture = members.filter(x => x.date >= today && regsOfDate(x.id).length === 0);
+        const choice = await chooseRepeatOff(emptyFuture.length, members.length - emptyFuture.length);
+        if (!choice) return;                                                        // cancelled – repeat stays ON
+        const removable = choice === 'remove' ? emptyFuture : [];
         const removeIds = new Set(removable.map(x => x.id));
         const keep = members.filter(x => !removeIds.has(x.id));
         const ops = [
@@ -1128,7 +1149,7 @@ const A = {
         await commitOps(ops);
         toast(removable.length
           ? 'Repeat is OFF – ' + removable.length + ' upcoming weekly date' + (removable.length > 1 ? 's' : '') + ' with no registrations removed' + (keep.length ? '; dates that already have registrations, or have already happened, were kept' : '')
-          : 'Repeat is OFF – no more weekly dates will be created. Dates already created stay (delete any you do not need).', 'ok');
+          : 'Repeat is OFF – no dates were removed. Dates already created stay (delete any you do not need one by one).', 'ok');
       }
       setTimeout(rerenderPanel, 150);
     });
