@@ -24,7 +24,7 @@ body.dk .hero{position:relative;isolation:isolate;overflow:hidden;max-width:none
 /* layer 1: the photo + dark vignette, fading out at the bottom so the hero melts into the page (no hard edge) */
 body.dk .hero::before{content:'';position:absolute;inset:0;z-index:-2;
   background:linear-gradient(180deg,rgba(5,7,10,.62) 0%,rgba(5,7,10,.12) 34%,rgba(5,7,10,.38) 72%,rgba(5,7,10,.7) 100%),linear-gradient(90deg,rgba(5,7,10,.72) 0%,rgba(5,7,10,0) 70%),
-    #0a0d12 var(--hero,none) center 72%/cover no-repeat;
+    #0a0d12 var(--hero,none) center top/cover no-repeat;   /* anchored to the TOP so the top of the photo is always fully visible; on any screen size only the bottom / sides are cropped */
   -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 58%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0%,#000 58%,transparent 100%)}
 /* layer 2: progressive BLUR on the bottom part of the photo */
 body.dk .hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:52%;z-index:-1;pointer-events:none;
