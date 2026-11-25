@@ -121,6 +121,17 @@ footer a{color:#9ec5ff}
 .okbox .sum{background:var(--soft);border-radius:14px;padding:14px;text-align:left;margin:16px 0;font-size:14px}
 .okbox .sum div{display:flex;justify-content:space-between;gap:12px;padding:4px 0}
 .okbox .sum span{color:var(--muted)}
+/* mock test */
+.mk-box{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:10px 16px;margin:6px 0 14px;font-size:13.5px}
+.mk-box h4{font-size:13px;margin:8px 0 4px;color:var(--navy)}
+.mk-box ul{margin:0 0 6px 18px;padding:0}.mk-box li{margin:2px 0}
+.mk-sec h5{font-size:12px;margin:14px 0 6px;color:var(--navy);text-transform:uppercase;letter-spacing:.05em}
+.mk-chip{display:inline-block;margin:0 6px 6px 0;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:700;background:#eef2f8;border:1px solid var(--line)}
+.mk-chip.ex{background:rgba(192,0,26,.07)}
+.mk-agree{display:flex;gap:9px;align-items:flex-start;font-size:13px;margin:14px 0 4px;cursor:pointer}
+.mk-agree input{margin-top:3px}
+.mk-note{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;white-space:pre-wrap}
+@media(max-width:820px){.mock-nav{display:none}}
 .lb{max-width:960px;padding:12px;background:#000}
 .lb img{width:100%;max-height:80vh;object-fit:contain;display:block;border-radius:10px}
 </style>
@@ -132,8 +143,9 @@ footer a{color:#9ec5ff}
     <div class="nav-in">
       <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></a>
       <nav class="nav-links">
-        <a href="index.html">Home</a><a href="#dates">Exam Dates</a><a href="#mybookings">My Bookings</a><a href="#about">Rules</a><a href="#gallery" id="navGal" hidden>Gallery</a>
+        <a href="index.html">Home</a><a href="#dates">Exam Dates</a><a href="#mybookings">My Bookings</a><a href="#mymock">Mock Tests</a><a href="#about">Rules</a><a href="#gallery" id="navGal" hidden>Gallery</a>
       </nav>
+      <button class="btn btn-ghost btn-sm mock-nav" id="mockNavBtn" onclick="openMock()">Book a Mock Test</button>
       <button class="btn btn-primary btn-sm" onclick="openRegister()">Register for Sim Exam</button>
     </div>
   </header>
@@ -144,6 +156,7 @@ footer a{color:#9ec5ff}
     <p class="lead" id="heroMsg">Practise in real exam conditions, get ready with confidence. Pick a date & time that suits you and reserve your seat in a minute.</p>
     <div class="hero-cta">
       <button class="btn btn-primary btn-lg" onclick="openRegister()">Register for Sim Exam</button>
+      <button class="btn btn-ghost btn-lg" id="mockHeroBtn" onclick="openMock()">📝 Book a Mock Test</button>
       <a class="btn btn-ghost btn-lg" href="#dates">View Exam Dates</a>
     </div>
     <div class="hero-stats" id="heroStats"></div>
@@ -163,6 +176,16 @@ footer a{color:#9ec5ff}
       <input id="codeIn" placeholder="Have a booking code? Paste it here"/>
       <button class="btn btn-blue" onclick="lookupCode()">Find</button>
     </div>
+  </section>
+
+  <section class="sec" id="mymock">
+    <div class="sec-h"><h2>My Mock Test Requests</h2><p>Your mock test requests made on this device. When the admin approves a request, it shows up here.</p></div>
+    <div class="mygrid" id="mockGrid"></div>
+    <div class="lookup">
+      <input id="mockCodeIn" placeholder="Have a mock test code? Paste it here"/>
+      <button class="btn btn-blue" onclick="lookupMock()">Find</button>
+    </div>
+    <div style="text-align:center;margin-top:16px"><button class="btn btn-primary" onclick="openMock()">📝 Book a Mock Test</button></div>
   </section>
 
   <section class="sec" id="about">
@@ -260,6 +283,7 @@ function renderAll() {
   renderDates();
   renderStats();
   if (regModal) renderPick();
+  if (mockModal) mockRenderInfo();
 }
 function renderStats() {
   const v = visibleDates();
@@ -460,9 +484,163 @@ async function lookupCode() {
   } catch (e) { toast('Invalid code', 'err'); }
 }
 
+/* ---------------- MOCK TEST (a separate request form – the admin approves it) ---------------- */
+const MK_DEF = {
+  enabled: true, duration: 60, openTime: '09:00', closeTime: '18:00', step: 30, buffer: 0, maxDays: 60,
+  intro: 'Practise a one-to-one mock test at a time that suits you. Pick a date, choose a free timing and send your request. We will confirm it on WhatsApp.',
+  instructions: 'Choose a date, then one of the free timings shown.\nYour request is only a request – it is confirmed when the admin approves it.\nAfter approval we will message you on WhatsApp.\nYou can see the approval on this page under “My Mock Test Requests”.',
+  terms: 'Arrive (or log in) 15 minutes before your approved time.\nA mock test cannot be moved to another time on the same day.\nIf you cannot come, cancel your request or message us on WhatsApp early.\nThe admin may change or reject a request if the time is not free.'
+};
+let mock = Object.assign({}, MK_DEF), mockBusy = {}, mockIds = JSON.parse(localStorage.getItem('mb_mock') || '[]'), mockDocs = {}, mockSubs = {}, mockModal = null, mockSel = null, mockDate = '';
+const mkMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
+const mkT = n => pad(Math.floor(n / 60)) + ':' + pad(n % 60);
+const mkLines = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
+const mkRange = (a, b) => fmtTime(a) + ' – ' + fmtTime(b);
+async function loadMock() {
+  try { const s = await db.collection('settings').doc('mock').get(); if (s.exists) mock = Object.assign({}, MK_DEF, s.data()); } catch (e) { /* use the defaults */ }
+  const on = mock.enabled !== false;
+  ['mockHeroBtn', 'mockNavBtn'].forEach(id => { const el = $('#' + id); if (el) el.hidden = !on; });
+  $('#mymock').hidden = !on && !mockIds.length;
+  mockIds.forEach(watchMock); renderMock();
+}
+/* what is taken on a day: simulation exam slots + APPROVED mock tests (public list without names) */
+function mockBusyList(date) {
+  const out = slots.filter(s => s.date === date).map(s => ({ s: mkMin(s.time), e: mkMin(s.endTime || addMinutes(s.time, 120)) }));
+  (mockBusy[date] || []).forEach(i => out.push({ s: mkMin(i.start), e: mkMin(i.end) }));
+  return out;
+}
+function mockFree(date) {
+  const dur = Number(mock.duration) || 60, step = Math.max(5, Number(mock.step) || 30), buf = Number(mock.buffer) || 0, open = mkMin(mock.openTime), close = mkMin(mock.closeTime), busy = mockBusyList(date), out = [];
+  for (let t = open; t + dur <= close; t += step) {
+    if (busy.some(b => t < b.e + buf && t + dur > b.s - buf)) continue;
+    if (ts(date, mkT(t)) <= Date.now()) continue;
+    out.push(t);
+  }
+  return out;
+}
+async function mockLoadBusy(date) {
+  try { const s = await db.collection('mockBusy').doc(date).get(); mockBusy[date] = s.exists ? (s.data().items || []) : []; } catch (e) { mockBusy[date] = mockBusy[date] || []; }
+}
+function mockRenderInfo() {
+  const box = mockModal && mockModal.$('#mkInfo'); if (!box) return;
+  if (!mockDate) { box.innerHTML = '<p class="help">Pick a date to see that day’s simulation exams, the mock tests already booked and the free timings.</p>'; return; }
+  const ex = slots.filter(s => s.date === mockDate).sort((a, b) => a.time.localeCompare(b.time));
+  const mk = (mockBusy[mockDate] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
+  const free = mockFree(mockDate), dur = Number(mock.duration) || 60;
+  if (mockSel != null && !free.includes(mockSel)) mockSel = null;
+  box.innerHTML = `<div class="mk-sec"><h5>📅 ${fmtDate(mockDate)}</h5>
+    <h5>Simulation exams on this day</h5>${ex.length ? ex.map(s => { const d = dates.find(x => x.id === s.dateId); return `<span class="mk-chip ex">${esc((d && d.title) || 'PTE Simulation Exam')} · ${mkRange(s.time, s.endTime || addMinutes(s.time, 120))}</span>`; }).join('') : '<span class="muted" style="font-size:13px">No simulation exam on this day</span>'}
+    <h5>Mock tests already booked</h5>${mk.length ? mk.map(i => `<span class="mk-chip">${mkRange(i.start, i.end)}</span>`).join('') : '<span class="muted" style="font-size:13px">No mock tests booked yet</span>'}
+    <h5>Available timings (${dur} minutes each)</h5>
+    ${free.length ? free.map(t => `<div class="so ${mockSel === t ? 'sel' : ''}" data-t="${t}"><span class="dot"></span><span class="t">${mkRange(mkT(t), mkT(t + dur))}</span><span class="s" style="color:var(--ok)">Free</span></div>`).join('') : '<div class="empty" style="padding:14px">No free timing on this day. Please choose another date.</div>'}</div>`;
+  $$('.so', box).forEach(el => el.onclick = () => { mockSel = Number(el.dataset.t); mockRenderInfo(); });
+}
+function openMock() {
+  if (!CONFIGURED) { toast('Site not configured yet', 'err'); return; }
+  if (mock.enabled === false) { toast('Mock test booking is closed right now', 'err'); return; }
+  mockSel = null; mockDate = '';
+  const ul = t => `<ul>${mkLines(t).map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  const min = todayStr(), max = dstr(new Date(Date.now() + (Number(mock.maxDays) || 60) * 86400000));
+  mockModal = modal(`
+    <h2 class="mh">Book a Mock Test</h2>
+    <p class="msub">${esc(mock.intro)}</p>
+    <div class="mk-box"><h4>📋 Instructions</h4>${ul(mock.instructions)}<h4>⚖️ Terms</h4>${ul(mock.terms)}</div>
+    <form id="mkForm" novalidate>
+      <div class="field"><label>Full name <span class="req">*</span></label><input id="mName" autocomplete="name" placeholder="Your full name"/></div>
+      <div class="field"><label>Email <span class="req">*</span></label><input id="mEmail" type="email" autocomplete="email" placeholder="you@example.com"/></div>
+      <div class="field"><label>WhatsApp / phone number <span class="req">*</span></label><input id="mPhone" type="tel" autocomplete="tel" placeholder="07X XXX XXXX"/></div>
+      <div class="field"><label>Choose a date <span class="req">*</span></label><input id="mDate" type="date" min="${min}" max="${max}"/></div>
+      <div id="mkInfo"></div>
+      <div class="field" style="margin-top:12px"><label>Message (optional)</label><textarea id="mNote" maxlength="300" style="min-height:60px" placeholder="Anything you want us to know"></textarea></div>
+      <label class="mk-agree"><input type="checkbox" id="mAgree"/><span>I have read the instructions and I agree to the terms.</span></label>
+      <div class="err" id="mkErr"></div>
+      <button class="btn btn-primary btn-block btn-lg" id="mkBtn" type="submit">Send mock test request</button>
+    </form>`, { onClose: () => { mockModal = null; } });
+  const saved = JSON.parse(localStorage.getItem('mb_profile') || '{}');
+  if (saved.name) mockModal.$('#mName').value = saved.name;
+  if (saved.email) mockModal.$('#mEmail').value = saved.email;
+  if (saved.phone) mockModal.$('#mPhone').value = saved.phone;
+  mockRenderInfo();
+  mockModal.$('#mDate').onchange = async e => { mockDate = e.target.value; mockSel = null; if (mockDate) { mockModal.$('#mkInfo').innerHTML = '<div class="empty"><div class="spin dark"></div></div>'; await mockLoadBusy(mockDate); } mockRenderInfo(); };
+  mockModal.$('#mkForm').onsubmit = e => { e.preventDefault(); submitMock(); };
+}
+async function submitMock() {
+  const m = mockModal, err = m.$('#mkErr');
+  const name = m.$('#mName').value.trim(), email = m.$('#mEmail').value.trim(), phone = m.$('#mPhone').value.trim(), note = m.$('#mNote').value.trim();
+  err.textContent = '';
+  if (name.length < 2) { err.textContent = 'Please enter your name.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return; }
+  if (!/^[+\d][\d\s\-]{6,18}$/.test(phone)) { err.textContent = 'Please enter a valid phone number.'; return; }
+  if (!mockDate) { err.textContent = 'Please choose a date.'; return; }
+  if (mockSel == null) { err.textContent = 'Please choose one of the free timings.'; return; }
+  if (!m.$('#mAgree').checked) { err.textContent = 'Please tick “I agree” to send your request.'; return; }
+  const btn = m.$('#mkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
+  await mockLoadBusy(mockDate);                                              // fresh check: the timing may have been taken a moment ago
+  if (!mockFree(mockDate).includes(mockSel)) { err.textContent = 'Sorry, that timing is no longer free. Please choose another one.'; mockSel = null; mockRenderInfo(); btn.disabled = false; btn.textContent = 'Send mock test request'; return; }
+  const dur = Number(mock.duration) || 60;
+  const data = { name, email, phone, date: mockDate, time: mkT(mockSel), endTime: mkT(mockSel + dur), duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
+  const bref = db.collection('mockBookings').doc();
+  try { await bref.set(data); }
+  catch (e) { err.textContent = (e && e.code === 'permission-denied') ? 'Mock test requests are not switched on yet. Please try again later or contact us.' : errMsg(e); btn.disabled = false; btn.textContent = 'Send mock test request'; return; }
+  localStorage.setItem('mb_profile', JSON.stringify({ name, email, phone }));
+  mockIds.push(bref.id); localStorage.setItem('mb_mock', JSON.stringify(mockIds)); mockDocs[bref.id] = { id: bref.id, ...data }; watchMock(bref.id); renderMock();
+  m.body.innerHTML = `<div class="okbox"><div class="big">✓</div><h2 class="mh" style="padding:0">Request sent!</h2>
+    <p class="msub">Thank you, ${esc(name.split(' ')[0])}. Your mock test is <b>not confirmed yet</b> – it is confirmed when the admin approves it. We will message you on WhatsApp.</p>
+    <div class="sum"><div><span>Date</span><b>${fmtDate(data.date)}</b></div><div><span>Time</span><b>${mkRange(data.time, data.endTime)}</b></div><div><span>Name</span><b>${esc(name)}</b></div>
+    <div><span>Code</span><b style="font-family:monospace;font-size:12px">${bref.id}</b></div></div>
+    <p class="help" style="margin-bottom:14px">You can check the approval any time under “My Mock Test Requests” on this page.</p>
+    <button class="btn btn-blue btn-block" id="mkDone">Done</button></div>`;
+  m.$('#mkDone').onclick = () => { m.close(); location.hash = '#mymock'; };
+}
+
+/* ---------------- my mock test requests ---------------- */
+function watchMock(id) {
+  if (mockSubs[id]) return;
+  mockSubs[id] = db.collection('mockBookings').doc(id).onSnapshot(s => {
+    const prev = mockDocs[id]; mockDocs[id] = s.exists ? { id, ...s.data() } : null;
+    if (prev && prev.status === 'pending' && mockDocs[id]) {
+      if (mockDocs[id].status === 'approved') toast('✅ Your mock test was approved!', 'ok');
+      else if (mockDocs[id].status === 'rejected') toast('Your mock test request was not approved', 'err');
+    }
+    renderMock();
+  }, () => { mockDocs[id] = undefined; renderMock(); });
+}
+function renderMock() {
+  const g = $('#mockGrid'); if (!g) return;
+  if (!mockIds.length) { g.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="ei">📝</div><p>No mock test requests on this device yet.</p></div>`; return; }
+  const list = mockIds.map(id => mockDocs[id]).filter(Boolean), gone = mockIds.filter(id => mockDocs[id] === null);
+  const done = b => b.status === 'approved' && Date.now() > ts(b.date, b.endTime);
+  list.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  g.innerHTML = list.map(b => {
+    const badge = done(b) ? '<span class="badge b-gray">Completed</span>' : b.status === 'approved' ? '<span class="badge b-ok">Approved ✓</span>' : b.status === 'pending' ? '<span class="badge b-warn">Waiting for approval</span>' : b.status === 'rejected' ? '<span class="badge b-red">Not approved</span>' : '<span class="badge b-gray">Cancelled</span>';
+    const extra = b.status === 'approved' ? (b.approvedNote ? `<div class="mk-note">${esc(b.approvedNote)}</div>` : '')
+      : b.status === 'pending' ? '<div class="mk-note">We will message you on WhatsApp as soon as the admin approves your request.</div>'
+      : b.status === 'rejected' ? `<div class="mk-note">${esc(b.rejectReason || 'Please send a new request for another time.')}</div>` : '';
+    return `<div class="card bcard ${b.status === 'approved' && !done(b) ? 'up' : b.status === 'pending' ? 'up' : 'done'}">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h4>Mock Test</h4>${badge}</div>
+      <div class="bl">📅 ${fmtDate(b.date)}</div><div class="bl">⏰ ${mkRange(b.time, b.endTime)}</div><div class="bl">👤 ${esc(b.name)}</div>
+      ${extra}<span class="code">${b.id}</span>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${b.status === 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="cancelMock('${b.id}')">Cancel request</button>` : ''}${['rejected', 'cancelled'].includes(b.status) || done(b) ? `<button class="btn btn-ghost btn-sm" onclick="dropMock('${b.id}')">Remove</button>` : ''}</div></div>`;
+  }).join('') + gone.map(id => `<div class="card bcard done"><h4>Request not found</h4><p class="bl">This request was removed by the organiser.</p><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="dropMock('${id}')">Remove</button></div>`).join('');
+}
+function dropMock(id) { mockIds = mockIds.filter(x => x !== id); delete mockDocs[id]; if (mockSubs[id]) { mockSubs[id](); delete mockSubs[id]; } localStorage.setItem('mb_mock', JSON.stringify(mockIds)); renderMock(); }
+async function cancelMock(id) {
+  if (!await confirmBox('Your mock test request will be cancelled.', { okText: 'Yes, cancel', danger: true, title: 'Cancel request?' })) return;
+  try { await db.collection('mockBookings').doc(id).update({ status: 'cancelled', cancelledAt: Date.now() }); toast('Request cancelled', 'ok'); } catch (e) { toast(errMsg(e), 'err'); }
+}
+async function lookupMock() {
+  const c = $('#mockCodeIn').value.trim(); if (!c) return;
+  try {
+    const s = await db.collection('mockBookings').doc(c).get();
+    if (!s.exists) { toast('Code not found', 'err'); return; }
+    if (!mockIds.includes(c)) { mockIds.push(c); localStorage.setItem('mb_mock', JSON.stringify(mockIds)); }
+    mockDocs[c] = { id: c, ...s.data() }; watchMock(c); $('#mockCodeIn').value = ''; renderMock(); toast('Found', 'ok');
+  } catch (e) { toast('Invalid code', 'err'); }
+}
+
 /* ---------------- start ---------------- */
 if (CONFIGURED) {
-  listen(); loadSite(); loadGallery(); loadMy(); sheetRetry();
+  listen(); loadSite(); loadGallery(); loadMy(); loadMock(); sheetRetry();
   setInterval(() => { renderDates(); renderStats(); renderMy(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { myDocs = {}; loadMy(); } });
 } else {
