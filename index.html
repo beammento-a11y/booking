@@ -1,28 +1,6 @@
 <!doctype html>
 <html lang="en">
 <head>
-
-
-<!-- Open Graph Meta Tags -->
-<!-- WhatsApp Link Preview -->
-<meta property="og:type" content="website">
-
-<meta property="og:title" content="Mento Beam - Find Your Perfect Venue">
-
-<meta property="og:description" content="Discover, Compare and Book Your Perfect Venue with Mento Beam.">
-
-<meta property="og:image" content="https://raw.githubusercontent.com/beammento-a11y/booking/98361b5f8f8c3d84a13720ec0d69cabbfbf7ad08/file_000000006a6c8211ba5674dfe1b61b01.png">
-
-<meta property="og:image:width" content="1000">
-<meta property="og:image:height" content="500">
-
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Mento Beam - Find Your Perfect Venue">
-<meta name="twitter:description" content="Discover, Compare and Book Your Perfect Venue.">
-<meta name="twitter:image" content="https://raw.githubusercontent.com/beammento-a11y/booking/98361b5f8f8c3d84a13720ec0d69cabbfbf7ad08/file_000000006a6c8211ba5674dfe1b61b01.png">
-
-
-
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <link rel="icon" type="image/png" href="icon.png"/><link rel="apple-touch-icon" href="icon.png"/>
 <title>MentoBeam – Exams, Venue Hire & Training Spaces</title>
@@ -39,7 +17,7 @@
 <div class="page">
   <header class="nav"><div class="nav-in">
     <a class="brand" href="index.html"><span id="navLogo"></span><img class="yfp-img" src="yfp-light.png" alt="Yes For PTE"/></a>
-    <nav class="nav-links"><a href="#book">Book</a><a href="#terms">Booking terms</a><a href="#contact">Contact</a></nav>
+    <nav class="nav-links"><a href="#book">Book</a><a href="#gallery" id="navGal" hidden>Gallery</a><a href="#terms">Booking terms</a><a href="#contact">Contact</a></nav>
     <a class="btn btn-primary btn-sm" href="exam.html">Register for Sim Exam</a>
   </div></header>
 
@@ -54,6 +32,11 @@
   <div class="rn-wrap"><section class="rn-sec" id="book">
     <span class="pill">Book</span><h2 style="margin-top:12px;font-size:clamp(1.6rem,4vw,2.4rem);font-weight:900">What would you like to book?</h2><p class="muted" style="margin-bottom:16px">Tap a card to see packages and rates.</p>
     <div class="rn-grid" id="cards"><div class="empty" style="grid-column:1/-1"><div class="spin dark"></div></div></div>
+  </section>
+
+  <section class="rn-sec" id="gallery" hidden>
+    <span class="pill">Gallery</span><h2 style="margin-top:12px;font-size:clamp(1.6rem,4vw,2.4rem);font-weight:900">Take a look around</h2>
+    <div class="gal" id="galGrid" style="margin-top:14px"></div>
   </section>
 
   <section class="rn-sec" id="terms"><div class="rn-terms"><h2>Booking terms</h2><ul id="termList"></ul>
@@ -100,6 +83,20 @@ function openSpace(id) {
       : `<div class="rn-closed">Bookings for this space are not open right now. You can still view the packages. Contact us on WhatsApp <b>${esc(R.rental.whatsapp || '')}</b> to ask about availability.</div>`}
     </div>`, { wide: false });
 }
+/* gallery: images come from the "gallery" folder (list is in gallery/gallery.js) */
+function loadGallery() {
+  const sc = document.createElement('script'); sc.src = 'gallery/gallery.js';
+  sc.onload = () => {
+    const items = (window.GALLERY || []).map(g => typeof g === 'string' ? { src: g, caption: '' } : g).filter(g => g && g.src);
+    if (!items.length) return;
+    const url = g => 'gallery/' + encodeURI(g.src);
+    $('#galGrid').innerHTML = items.map(g => `<figure data-src="${esc(url(g))}"><img loading="lazy" src="${esc(url(g))}" alt="${esc(g.caption || '')}"/>${g.caption ? `<figcaption>${esc(g.caption)}</figcaption>` : ''}</figure>`).join('');
+    $('#gallery').hidden = false; $('#navGal').hidden = false;
+    $$('#galGrid figure').forEach(f => f.onclick = () => { const m = modal(`<img src="${f.dataset.src}" alt=""/>`, { wide: true }); m.el.querySelector('.mdl').classList.add('lb'); });
+  };
+  document.head.appendChild(sc);   // if the file is missing nothing happens, the section just stays hidden
+}
+loadGallery();
 (async () => { R = await loadRentals(); render(); })();
 </script>
 </body></html>
