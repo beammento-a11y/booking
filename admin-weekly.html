@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<link rel="icon" type="image/png" href="icon.png"/>
+<link rel="apple-touch-icon" href="icon.png"/>
+<title>MentoBeam – Admin Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="theme.css"/>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="common.js"></script>
+<style>
+body{background:var(--soft)}
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);position:relative;z-index:1}
+
+/* auth */
+.authwrap{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#fff}
+.authcard{width:100%;max-width:430px;padding:30px 28px}
+.alogo{text-align:center;margin-bottom:18px}
+.alogo small{display:block;margin-top:10px;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+.authcard h2{font-size:21px;margin-bottom:4px}
+.authcard .sub{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin:2px 0 14px;cursor:pointer}
+.notice{background:#fff4e5;border:1px solid #f3d29b;color:#7a4e00;padding:10px 12px;border-radius:10px;font-size:13px;margin-bottom:14px}
+.infobox{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted);margin-bottom:14px}
+
+/* shell */
+#app{position:relative;z-index:1;display:grid;grid-template-columns:252px 1fr;min-height:100vh}
+.side{background:var(--navy);color:#cfd8e6;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;z-index:60}
+.side-top{padding:22px 20px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.side-top .mb-logo{color:#fff}
+.side-top img{height:24px;width:auto;display:block}
+.alogo-img{height:44px;width:auto;display:inline-block}
+.side-top small{display:block;margin-top:9px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7f93b0;font-weight:700}
+#nav{flex:1;overflow-y:auto;padding:12px}
+#nav a{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;color:#cfd8e6;text-decoration:none;font-weight:600;font-size:14px;margin-bottom:3px}
+#nav a:hover{background:rgba(255,255,255,.07)}
+#nav a.on{background:linear-gradient(135deg,var(--red),var(--red2));color:#fff}
+.side-foot{padding:14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:7px}
+.side-foot button{background:rgba(255,255,255,.07);border:none;color:#e5ecf6;padding:9px 12px;border-radius:9px;font-size:13px;font-weight:600;text-align:left}
+.side-foot button:hover{background:rgba(255,255,255,.14)}
+#meBox{padding:2px 4px 6px;font-size:13px;color:#fff}
+#meBox small{display:block;color:#8ea3c0;font-size:11.5px}
+.main{min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:16px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
+.top h1{font-size:20px;flex:1}
+.burger{display:none;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:18px}
+.side-shade{display:none}
+#view{padding:22px 24px 80px;max-width:1200px}
+@media(max-width:900px){
+  #app{grid-template-columns:1fr}
+  .side{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .25s;width:262px}
+  .side.open{transform:none}
+  .side-shade.open{display:block;position:fixed;inset:0;background:rgba(6,24,47,.5);z-index:55}
+  .burger{display:block}
+  #view{padding:16px 14px 80px}.top{padding:12px 14px}
+}
+
+.box{padding:20px;margin-bottom:18px}
+.box h3{font-size:16px;margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+.stat{padding:16px 18px;display:flex;align-items:center;gap:14px}
+.stat i{font-style:normal;width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(26,86,176,.1)}
+.stat b{display:block;font-family:Montserrat;font-size:25px;color:var(--navy);line-height:1.1}
+.stat span{font-size:12px;color:var(--muted);font-weight:600}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:700;font-size:13px;color:var(--muted)}
+.tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.drow{display:flex;align-items:center;gap:14px;padding:12px;border:1px solid var(--line);border-radius:13px;margin-bottom:9px;cursor:pointer;background:#fff;transition:border-color .15s,box-shadow .15s}
+.drow:hover{border-color:var(--blue2);box-shadow:0 6px 18px rgba(6,24,47,.07)}
+.dblk{flex-shrink:0;width:54px;border-radius:11px;overflow:hidden;text-align:center;border:1px solid var(--line)}
+.dblk i{display:block;font-style:normal;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 0;letter-spacing:.08em}
+.dblk b{display:block;font-family:Montserrat;font-size:21px;color:var(--navy);padding:3px 0 4px;line-height:1.1}
+.drow .di{flex:1;min-width:0}
+.drow .di h4{font-size:14.5px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .di p{font-size:12.5px;color:var(--muted)}
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+.banner{padding:12px 16px;border-radius:12px;font-weight:600;font-size:13.5px;margin-bottom:16px;display:flex;gap:10px;align-items:center}
+.banner.warn{background:#fff4e5;border:1px solid #f3d29b;color:#7a4e00}
+.banner.crit{background:#fdecee;border:1px solid #f1a5ae;color:#8a0016}
+.chip{padding:5px 11px;border-radius:999px;font-size:12px;font-weight:800;background:#eef1f6;color:var(--muted)}
+.chip.warn{background:#fff4e5;color:#a86f00}.chip.crit{background:#fdecee;color:var(--red)}
+
+/* tables */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:9px 10px;border-bottom:2px solid var(--line);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:#fafbfd}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+.slotbox{border:1px solid var(--line);border-radius:13px;margin-bottom:12px;overflow:hidden}
+.sbh{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--soft);padding:10px 14px;font-size:13.5px;flex-wrap:wrap}
+.sbh span{color:var(--muted);font-weight:600;font-size:12.5px}
+.slotbox .tw{padding:0 6px}
+.fr{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.fr .field{margin-bottom:0;min-width:180px}
+.fr .grow{flex:1}
+
+/* calendar */
+.cal-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.cal-head h3{font-size:19px;flex:1;min-width:150px;margin:0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.dow{text-align:center;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;padding:4px 0}
+.cell{min-height:86px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:7px;text-align:left;display:flex;flex-direction:column;gap:4px;transition:border-color .15s,transform .1s}
+.cell:hover{border-color:var(--blue2);transform:translateY(-1px)}
+.cell.blank{visibility:hidden}
+.cell.past{background:#f6f7f9;color:#9aa6b8}
+.cell.today{border:2px solid var(--red)}
+.cell .cn{font-weight:800;font-size:13px}
+.cp{font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:6px;line-height:1.3;display:block}
+.cp.s-open,.cp.s-today{background:rgba(18,161,80,.14);color:var(--ok)}
+.cp.s-full{background:rgba(230,154,0,.16);color:#a86f00}
+.cp.s-closed{background:rgba(192,0,26,.1);color:var(--red)}
+.cp.s-completed,.cp.s-empty{background:#e9edf3;color:var(--muted)}
+@media(max-width:700px){.cell{min-height:62px;padding:4px}.cp{font-size:9px;padding:1px 3px}.cal-grid{gap:3px}}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--muted)}
+
+/* attendance */
+.att-btns{display:flex;gap:5px}
+.ab{padding:5px 10px;border-radius:8px;border:1.5px solid var(--line);background:#fff;font-size:12px;font-weight:800;color:var(--muted)}
+.ab.p.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.ab.a.on{background:var(--red);border-color:var(--red);color:#fff}
+.ab:hover{border-color:var(--blue2)}
+
+/* storage */
+.sbar{height:18px;border-radius:9px;background:#e9edf3;overflow:hidden}
+.sbar i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#5fcf8a);border-radius:9px;transition:width .5s}
+.sbar i.warn{background:linear-gradient(90deg,var(--warn),#f5c35a)}
+.sbar i.crit{background:linear-gradient(90deg,var(--red),var(--red2))}
+.parts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:16px}
+.part{background:var(--soft);border-radius:11px;padding:10px 13px}
+.part b{display:block;font-size:15px}.part span{font-size:12px;color:var(--muted)}
+
+/* content */
+.gthumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
+.gt{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.gt img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.gt div{padding:7px;display:flex;gap:6px}
+.gt input{padding:6px 8px;font-size:12px}
+.perms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px}
+@media(max-width:520px){.perms{grid-template-columns:1fr}}
+.perms label{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600;padding:8px 10px;border:1px solid var(--line);border-radius:10px;text-transform:none;letter-spacing:0;color:var(--text);margin:0;cursor:pointer}
+.pnl h2.mh{padding-right:36px}
+.pt{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div id="boot" class="center"><div class="spin dark" style="width:28px;height:28px"></div><span>Loading admin panel…</span></div>
+
+<div id="authWrap" class="authwrap" hidden><div class="card authcard" id="authCard"></div></div>
+
+<div id="app" hidden>
+  <aside class="side" id="side">
+    <div class="side-top"><span id="sideLogo"></span><small>Admin Panel</small></div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <div id="meBox"></div>
+      <button data-act="pwd">🔑 Change password</button>
+      <button data-act="logout">⎋ Sign out</button>
+    </div>
+  </aside>
+  <div class="side-shade" id="shade" data-act="closeSide"></div>
+  <div class="main">
+    <header class="top">
+      <button class="burger" data-act="openSide" aria-label="Menu">☰</button>
+      <h1 id="pageTitle">Dashboard</h1>
+      <span id="topChip"></span>
+    </header>
+    <div id="view"></div>
+  </div>
+</div>
+
+<script>
+injectDeco();
+$('#sideLogo').innerHTML = '<img src="nav-logo.png" alt="MentoBeam"/>';
+
+/* ====================== constants & state ====================== */
+const PERMS = {
+  dates: 'Exam dates & time slots',
+  bookings: 'Registrations (view / edit / delete)',
+  attendance: 'Attendance page',
+  reports: 'Reports & PDF',
+  content: 'Website content & photos',
+  storage: 'Storage & monthly cleanup'
+};
+const ALLPERMS = Object.fromEntries(Object.keys(PERMS).map(k => [k, true]));
+const NAV = [
+  { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+  { id: 'calendar', icon: '🗓️', label: 'Exam Dates', perm: 'dates' },
+  { id: 'registrations', icon: '👥', label: 'Registrations', perm: 'bookings' },
+  { id: 'attendance', icon: '✅', label: 'Attendance', perm: 'attendance' },
+  { id: 'reports', icon: '📄', label: 'Reports', perm: 'reports' },
+  { id: 'content', icon: '🖼️', label: 'Website Content', perm: 'content' },
+  { id: 'storage', icon: '💾', label: 'Storage', perm: 'storage' },
+  { id: 'sheet', icon: '📗', label: 'Google Sheet', perm: '__super' },
+  { id: 'admins', icon: '🔐', label: 'Admins', perm: '__super' }
+];
+const view = $('#view');
+let me = null, user = null, dates = [], slots = [], bookings = [], unsubs = [];
+let current = 'dashboard', activePanel = null, storageInfo = null;
+let setupReady = Promise.resolve(), settingUp = false, setupDone = false, authNotice = '', started = false;
+
+const can = p => !!me && (me.role === 'super' || (me.perms && me.perms[p] === true));
+const slotsOf = id => slots.filter(s => s.dateId === id).sort((a, b) => a.time.localeCompare(b.time));
+const regsOfSlot = id => bookings.filter(b => b.slotId === id);
+const regsOfDate = id => bookings.filter(b => b.dateId === id);
+async function run(btn, fn) {
+  const old = btn ? btn.innerHTML : null;
+  if (btn) btn.disabled = true;
+  try { return await fn(); } catch (e) { toast(errMsg(e), 'err'); }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; if (old != null) btn.innerHTML = old; } }
+}
+function authErr(e) {
+  const c = e && e.code;
+  if (['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/user-not-found'].includes(c)) return 'Email or password is incorrect.';
+  if (c === 'auth/too-many-requests') return 'Too many attempts. Please wait a few minutes and try again.';
+  if (c === 'auth/email-already-in-use') return 'This email already has an account.';
+  if (c === 'auth/weak-password') return 'Password is too weak (minimum 6 characters).';
+  if (c === 'auth/invalid-email') return 'Invalid email address.';
+  if (c === 'auth/network-request-failed') return 'Network error. Check your internet.';
+  if (c === 'auth/operation-not-allowed') return 'Email/Password sign-in is not enabled in Firebase Authentication.';
+  return errMsg(e);
+}
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+  return (b / 1073741824).toFixed(2) + ' GB';
+}
+function dBlock(ds) {
+  const d = parseD(ds);
+  return `<div class="dblk"><i>${d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase()}</i><b>${d.getDate()}</b></div>`;
+}
+function attBadge(v) { return v === true ? '<span class="badge b-ok">Present</span>' : v === false ? '<span class="badge b-red">Absent</span>' : '<span class="badge b-gray">Not marked</span>'; }
+
+/* ====================== AUTH ====================== */
+async function boot() {
+  if (!CONFIGURED) {
+    $('#boot').innerHTML = '<div style="max-width:420px;text-align:center;padding:20px"><h2>Firebase config missing</h2><p style="margin-top:8px">common.js file එකේ <b>firebaseConfig</b> එක paste කරන්න. (README.md බලන්න)</p></div>';
+    return;
+  }
+  /* the 'is setup done' check and the login/session restore now run at the SAME time (before: one after the other) */
+  setupReady = db.collection('meta').doc('setup').get().then(s => { setupDone = s.exists; });
+  setupReady.catch(e => { $('#boot').innerHTML = '<div style="max-width:440px;text-align:center;padding:20px"><h2>Cannot reach the database</h2><p style="margin-top:8px">' + esc(errMsg(e)) + '</p><p class="help">Firestore database create කරලා rules publish කළාද බලන්න.</p></div>'; });
+  auth.onAuthStateChanged(onAuth);
+}
+async function onAuth(u) {
+  if (settingUp) return;
+  if (!u) { stopApp(); try { await setupReady; } catch (e) { return; } showAuth(setupDone ? 'login' : 'setup'); return; }
+  if (started && user && user.uid === u.uid) return;
+  try {
+    const snap = await db.collection('admins').doc(u.uid).get();
+    if (!snap.exists) { authNotice = 'This account does not have admin access.'; await auth.signOut(); return; }
+    user = u; me = { id: u.uid, ...snap.data() }; startApp();
+  } catch (e) { authNotice = errMsg(e); await auth.signOut(); }
+}
+function showAuth(mode) {
+  $('#boot').hidden = true; $('#app').hidden = true; $('#authWrap').hidden = false;
+  const card = $('#authCard'); const note = authNotice; authNotice = '';
+  const head = `<div class="alogo"><img class="alogo-img" src="nav-logo.png" alt="MentoBeam"/><small>Admin Panel</small></div>${note ? `<div class="notice">${esc(note)}</div>` : ''}`;
+  if (mode === 'setup') {
+    card.innerHTML = head + `<h2>First-time setup</h2><p class="sub">Create the <b>Super Admin</b> account. You will be able to add more admins and give them permissions later.</p>
+    <form id="setupForm" autocomplete="on">
+      <div class="field"><label>Your name</label><input id="suName" required autocomplete="name"/></div>
+      <div class="field"><label>Email</label><input id="suEmail" type="email" required autocomplete="username"/></div>
+      <div class="field"><label>Password (min 6)</label><input id="suPw" type="password" required minlength="6" autocomplete="new-password"/></div>
+      <div class="field"><label>Confirm password</label><input id="suPw2" type="password" required autocomplete="new-password"/></div>
+      <div class="field"><label>Master delete password</label><input id="suMp" type="password" required minlength="4" autocomplete="off"/>
+        <div class="help">This is needed later to delete the first (founder) Super Admin. Keep it safe.</div></div>
+      <div class="err" id="authErr"></div>
+      <button class="btn btn-primary btn-block btn-lg" id="suBtn">Create Super Admin</button>
+    </form>`;
+    $('#setupForm').onsubmit = e => { e.preventDefault(); doSetup(); };
+  } else if (mode === 'reset') {
+    card.innerHTML = head + `<h2>Reset password</h2><p class="sub">We will email you a reset link.</p>
+    <form id="resetForm"><div class="field"><label>Email</label><input id="rsEmail" type="email" required/></div>
+    <div class="err" id="authErr"></div><button class="btn btn-blue btn-block" id="rsBtn">Send reset link</button>
+    <p style="text-align:center;margin-top:14px"><a href="#" id="backLogin">← Back to sign in</a></p></form>`;
+    $('#backLogin').onclick = e => { e.preventDefault(); showAuth('login'); };
+    $('#resetForm').onsubmit = async e => {
+      e.preventDefault(); const b = $('#rsBtn'); b.disabled = true;
+      try { await auth.sendPasswordResetEmail($('#rsEmail').value.trim()); $('#authErr').style.color = 'var(--ok)'; $('#authErr').textContent = 'Reset link sent. Check your email.'; }
+      catch (er) { $('#authErr').style.color = ''; $('#authErr').textContent = authErr(er); }
+      b.disabled = false;
+    };
+  } else {
+    card.innerHTML = head + `<h2>Sign in</h2><p class="sub">Authorised staff only.</p>
+    <form id="loginForm" autocomplete="on">
+      <div class="field"><label>Email</label><input id="liEmail" name="email" type="email" required autocomplete="username"/></div>
+      <div class="field"><label>Password</label><input id="liPw" name="password" type="password" required autocomplete="current-password"/></div>
+      <label class="chk"><input type="checkbox" id="liKeep" checked/> Keep me signed in on this device (auto login)</label>
+      <div class="err" id="authErr"></div>
+      <button class="btn btn-primary btn-block btn-lg" id="liBtn">Sign in</button>
+      <p style="text-align:center;margin-top:14px;font-size:13px"><a href="#" id="forgot">Forgot password?</a></p>
+    </form>`;
+    $('#forgot').onclick = e => { e.preventDefault(); showAuth('reset'); };
+    $('#loginForm').onsubmit = async e => {
+      e.preventDefault(); const b = $('#liBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>';
+      try {
+        await auth.setPersistence($('#liKeep').checked ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION);
+        await auth.signInWithEmailAndPassword($('#liEmail').value.trim(), $('#liPw').value);
+      } catch (er) { $('#authErr').textContent = authErr(er); b.disabled = false; b.textContent = 'Sign in'; }
+    };
+  }
+}
+async function doSetup() {
+  const name = $('#suName').value.trim(), email = $('#suEmail').value.trim(), pw = $('#suPw').value, pw2 = $('#suPw2').value, mp = $('#suMp').value;
+  const err = $('#authErr'); err.textContent = '';
+  if (!name) { err.textContent = 'Enter your name.'; return; }
+  if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw !== pw2) { err.textContent = 'Passwords do not match.'; return; }
+  if (mp.length < 4) { err.textContent = 'Master delete password must be at least 4 characters.'; return; }
+  const btn = $('#suBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Creating...';
+  settingUp = true;
+  let cred = null;
+  try {
+    cred = await auth.createUserWithEmailAndPassword(email, pw);
+    const uid = cred.user.uid, salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const hash = await sha256(salt + mp);
+    const profile = { name, email, role: 'super', founder: true, perms: ALLPERMS, createdAt: Date.now() };
+    const b = db.batch();
+    b.set(db.collection('meta').doc('setup'), { done: true, superUid: uid, createdAt: Date.now() });
+    b.set(db.collection('admins').doc(uid), profile);
+    b.set(db.collection('secure').doc('master'), { salt, hash });
+    await b.commit();
+    setupDone = true; settingUp = false;
+    user = cred.user; me = { id: uid, ...profile }; startApp();
+  } catch (e) {
+    settingUp = false;
+    if (cred && cred.user) { try { await cred.user.delete(); } catch (_) { /* ignore */ } }
+    err.textContent = e.code === 'permission-denied' ? 'Setup already done, or Firestore rules are not published yet.' : authErr(e);
+    btn.disabled = false; btn.textContent = 'Create Super Admin';
+  }
+}
+async function logout() { await auth.signOut(); }
+
+/* ====================== APP SHELL ====================== */
+function startApp() {
+  started = true;
+  $('#authWrap').hidden = true; $('#boot').hidden = true; $('#app').hidden = false;
+  $('#meBox').innerHTML = `<b>${esc(me.name || me.email)}</b><small>${me.role === 'super' ? 'Super admin' : 'Admin'} · ${esc(me.email || '')}</small>`;
+  renderNav(); subscribe();
+  if (!location.hash.startsWith('#/')) location.hash = '#/dashboard';
+  route();
+  setTimeout(computeStorage, 2500);
+  sheetHealed = false; loadSheetCfg().then(() => setTimeout(sheetHeal, 3000));
+}
+function stopApp() {
+  started = false; unsubs.forEach(u => u()); unsubs = [];
+  dates = []; slots = []; bookings = []; me = null; user = null; activePanel = null;
+  $$('.ov').forEach(o => o.remove()); document.body.style.overflow = '';
+  location.hash = '';
+}
+function renderNav() {
+  $('#nav').innerHTML = NAV.filter(n => !n.perm || (n.perm === '__super' ? me.role === 'super' : can(n.perm)))
+    .map(n => `<a href="#/${n.id}" data-nav="${n.id}"><span>${n.icon}</span>${n.label}</a>`).join('');
+}
+function subscribe() {
+  const bad = e => toast('Live data error: ' + errMsg(e), 'err');
+  unsubs.push(db.collection('examDates').orderBy('date').onSnapshot(s => { dates = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 1; repeatKick(); refresh(); }, bad));
+  unsubs.push(db.collection('slots').onSnapshot(s => { slots = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 2; repeatKick(); refresh(); }, bad));
+  unsubs.push(db.collection('bookings').onSnapshot(s => { bookings = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
+}
+/* ---------- WEEKLY REPEAT (only for exam dates where the admin pressed "Repeat every week") ----------
+   Each repeating date keeps the next 8 weeks of exam days ready (same weekday, same time slots, seats reset to 0).
+   Every exam day is its own date, so each day keeps its own registrations, attendance and report, and becomes "Completed" by itself. */
+const REPEAT_WEEKS = 8;
+let _repLoad = 0, _repDone = false, _repBusy = false;
+const addDays = (ds, n) => { const [y, m, d] = ds.split('-').map(Number); return dstr(new Date(y, m - 1, d + n)); };
+function repeatKick() { if (_repDone || _repLoad !== 3) return; _repDone = true; setTimeout(() => repeatTopUp(true), 1200); }
+async function repeatTopUp(quiet) {
+  if (_repBusy || !me || !can('dates')) return 0;
+  _repBusy = true; let made = 0;
+  try {
+    const today = todayStr(), horizon = addDays(today, REPEAT_WEEKS * 7);
+    const groups = {};
+    dates.filter(d => d.repeatWeekly === true).forEach(d => { (groups[d.seriesId || d.id] = groups[d.seriesId || d.id] || []).push(d); });
+    for (const sid of Object.keys(groups)) {
+      const mem = groups[sid].sort((a, b) => a.date.localeCompare(b.date));
+      const last = mem[mem.length - 1];
+      const tpl = mem.slice().reverse().find(m => slotsOf(m.id).length);          // newest day that has time slots = the pattern to copy
+      if (!tpl) continue;
+      const tsl = slotsOf(tpl.id);
+      let t = addDays(last.date, 7);
+      while (t < today) t = addDays(t, 7);                                          // never create days in the past
+      for (; t <= horizon; t = addDays(t, 7)) {
+        if (dates.some(x => x.date === t)) continue;                                // an exam already exists that day
+        const did = sid + '_' + t, dref = db.collection('examDates').doc(did);
+        const ok = await db.runTransaction(async tx => {
+          if ((await tx.get(dref)).exists) return false;                            // safe if two admins open the panel together
+          tx.set(dref, { date: t, title: tpl.title || 'PTE Simulation Exam', notes: tpl.notes || '', closed: false, createdAt: Date.now(), repeatWeekly: true, seriesId: sid });
+          tsl.forEach((sl, i) => tx.set(db.collection('slots').doc(did + '_' + i), { dateId: did, date: t, time: sl.time, endTime: sl.endTime || null, capacity: sl.capacity == null ? null : sl.capacity, booked: 0, createdAt: Date.now() }));
+          return true;
+        });
+        if (ok) { made++; sheetQueue({ dates: [did] }); }
+      }
+    }
+    if (made) toast('🔁 ' + made + ' weekly exam date' + (made > 1 ? 's' : '') + ' created automatically', 'ok');
+  } catch (e) { if (!quiet) toast(errMsg(e), 'err'); console.warn('weekly repeat', e); }
+  finally { _repBusy = false; }
+  return made;
+}
+let _rf = 0;
+function refresh() {
+  if (_rf) return;
+  _rf = requestAnimationFrame(() => {
+    _rf = 0;
+    if (!started) return;
+    const v = views[current]; if (v && v.refresh) v.refresh();
+    if (activePanel) {
+      const ae = document.activeElement;
+      const typing = ae && activePanel.m.el.contains(ae) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName);
+      if (!typing) activePanel.render();
+    }
+  });
+}
+function route() {
+  if (!started) return;
+  let id = (location.hash.replace('#/', '') || 'dashboard').split('?')[0];
+  const nav = NAV.find(n => n.id === id);
+  const allowed = nav && (!nav.perm || (nav.perm === '__super' ? me.role === 'super' : can(nav.perm)));
+  if (!allowed) { id = 'dashboard'; }
+  current = id;
+  $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.nav === id));
+  $('#pageTitle').textContent = NAV.find(n => n.id === id).label;
+  $('#side').classList.remove('open'); $('#shade').classList.remove('open');
+  views[id].render();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+
+/* ====================== STORAGE ESTIMATE ====================== */
+const getLimit = () => (Number(localStorage.getItem('mb_limit_mb')) || 1024) * 1048576;
+async function computeStorage() {
+  if (!started) return;
+  const sz = (id, o) => JSON.stringify(o).length + String(id).length + 32;
+  const parts = { 'Exam dates': 0, 'Time slots': 0, 'Bookings': 0, 'Rentals': 0, 'Error log': 0, 'Photos': 0, 'Settings': 0, 'Admins': 0 };
+  dates.forEach(({ id, ...r }) => parts['Exam dates'] += sz(id, r));
+  slots.forEach(({ id, ...r }) => parts['Time slots'] += sz(id, r));
+  bookings.forEach(({ id, ...r }) => parts['Bookings'] += sz(id, r));
+  try { rentBookings.forEach(({ id, ...r }) => parts['Rentals'] += sz(id, r)); rentSpaces.forEach(({ id, ...r }) => parts['Rentals'] += sz(id, r)); } catch (e) { /* rentals module not loaded */ }
+  try { errLogs.forEach(({ id, ...r }) => parts['Error log'] += sz(id, r)); } catch (e) { /* ignore */ }
+  /* gallery + settings + admins are read at the same time (before: one after the other) */
+  const [g, s, a] = await Promise.all([db.collection('gallery').get().catch(() => null), db.collection('settings').get().catch(() => null), db.collection('admins').get().catch(() => null)]);
+  if (g) g.forEach(d => parts['Photos'] += sz(d.id, d.data()));
+  if (s) s.forEach(d => parts['Settings'] += sz(d.id, d.data()));
+  if (a) a.forEach(d => parts['Admins'] += sz(d.id, d.data())); else parts['Admins'] = 800;
+  const used = Object.values(parts).reduce((a, b) => a + b, 0);
+  storageInfo = { parts, used, limit: getLimit(), at: Date.now() };
+  updateChip();
+  if (current === 'storage' || current === 'dashboard') views[current].refresh && views[current].refresh();
+}
+function storagePct() { return storageInfo ? storageInfo.used / storageInfo.limit : 0; }
+function updateChip() {
+  const el = $('#topChip'); if (!storageInfo) { el.innerHTML = ''; return; }
+  const p = storagePct(), cls = p >= .95 ? 'crit' : p >= .8 ? 'warn' : '';
+  el.innerHTML = `<span class="chip ${cls}">💾 ${(p * 100).toFixed(p < .1 ? 1 : 0)}% used</span>`;
+}
+function storageBanner() {
+  const p = storagePct(); if (!storageInfo || p < .8) return '';
+  return p >= .95
+    ? `<div class="banner crit">🚨 Storage almost FULL (${(p * 100).toFixed(0)}%). Delete old months now in the Storage page, otherwise new bookings may fail.</div>`
+    : `<div class="banner warn">⚠️ Storage is ${(p * 100).toFixed(0)}% full. Please delete old months soon (Storage page).</div>`;
+}
+
+/* ====================== VIEWS ====================== */
+const views = {};
+
+/* ---------- DASHBOARD ---------- */
+let dashTab = 'up';
+function dateRows() {
+  const now = Date.now();
+  return dates.map(d => {
+    const sl = slotsOf(d.id), regs = regsOfDate(d.id).length;
+    const caps = sl.map(s => s.capacity);
+    const cap = sl.length && caps.every(c => c != null) ? caps.reduce((a, b) => a + b, 0) : null;
+    return { d, sl, regs, cap, st: dateStatus(d, sl, now) };
+  });
+}
+views.dashboard = {
+  render() {
+    view.innerHTML = `<div id="dbWarn"></div><div class="stats" id="dbStats"></div>
+    <div class="card box"><div class="tabs" id="dbTabs">
+      <button class="tab" data-act="dashTab" data-t="up">Today & Upcoming</button>
+      <button class="tab" data-act="dashTab" data-t="done">Completed</button>
+      <button class="tab" data-act="dashTab" data-t="all">All dates</button></div>
+      <div id="dbList"></div></div>`;
+    this.refresh();
+  },
+  refresh() {
+    if (!$('#dbList')) return;
+    const rows = dateRows(), now = Date.now(), today = todayStr();
+    const up = rows.filter(r => r.st !== 'completed' && r.st !== 'empty' || (r.st === 'empty' && r.d.date >= today));
+    const done = rows.filter(r => r.st === 'completed');
+    const upRegs = bookings.filter(b => ts(b.date, b.endTime || addMinutes(b.time, 120)) >= now).length;
+    const todayRegs = bookings.filter(b => b.date === today).length;
+    $('#dbWarn').innerHTML = storageBanner();
+    $('#dbStats').innerHTML = `
+      <div class="card stat"><i>📅</i><div><b>${up.length}</b><span>Upcoming exam dates</span></div></div>
+      <div class="card stat"><i style="background:rgba(192,0,26,.1)">🎟️</i><div><b>${upRegs}</b><span>Upcoming registrations</span></div></div>
+      <div class="card stat"><i style="background:rgba(18,161,80,.12)">🕘</i><div><b>${todayRegs}</b><span>Students today</span></div></div>
+      <div class="card stat"><i style="background:rgba(230,154,0,.14)">👥</i><div><b>${bookings.length}</b><span>Total registrations</span></div></div>
+      <div class="card stat"><i style="background:#eef1f6">💾</i><div><b>${storageInfo ? (storagePct() * 100).toFixed(storagePct() < .1 ? 1 : 0) + '%' : '…'}</b><span>Storage used</span></div></div>`;
+    $$('#dbTabs .tab').forEach(t => t.classList.toggle('on', t.dataset.t === dashTab));
+    let list = dashTab === 'up' ? up.sort((a, b) => a.d.date.localeCompare(b.d.date))
+      : dashTab === 'done' ? done.sort((a, b) => b.d.date.localeCompare(a.d.date))
+      : rows.slice().sort((a, b) => a.d.date.localeCompare(b.d.date));
+    $('#dbList').innerHTML = list.length ? list.map(r => `
+      <div class="drow" data-act="dateOpen" data-id="${r.d.id}">
+        ${dBlock(r.d.date)}
+        <div class="di"><h4>${esc(r.d.title || 'PTE Simulation Exam')}</h4>
+          <p>${fmtDate(r.d.date)} · ${r.sl.length} slot${r.sl.length === 1 ? '' : 's'} · ${r.regs} registered${r.cap != null ? ' / ' + r.cap + ' seats' : ''}</p></div>
+        ${statusBadge(r.st)}
+      </div>`).join('')
+      : `<div class="empty">${dashTab === 'done' ? 'No completed exam dates yet.' : 'No exam dates yet.' + (can('dates') ? ' Go to <b>Exam Dates</b> to add one.' : '')}</div>`;
+  }
+};
+function renderDateDetail(body, id) {
+  const d = dates.find(x => x.id === id);
+  if (!d) { body.innerHTML = '<p class="muted">This exam date no longer exists.</p>'; return; }
+  const sl = slotsOf(id), st = dateStatus(d, sl);
+  body.innerHTML = `<h2 class="mh">${esc(d.title || 'PTE Simulation Exam')}</h2>
+    <p class="msub">${fmtDate(d.date)} &nbsp;${statusBadge(st)} ${d.closed ? '<span class="badge b-red">Registration closed manually</span>' : ''}</p>
+    ${d.notes ? `<p style="margin:-6px 0 14px;font-size:13.5px">${esc(d.notes)}</p>` : ''}
+    ${sl.length ? sl.map(s => {
+      const regs = regsOfSlot(s.id).sort((a, b) => a.name.localeCompare(b.name));
+      return `<div class="slotbox"><div class="sbh"><b>⏰ ${slotLabel(s)}</b><span>${regs.length} registered${s.capacity != null ? ' / ' + s.capacity + ' seats' : ' (no limit)'}</span></div>
+      ${regs.length ? `<div class="tw"><table><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Attendance</th></tr></thead><tbody>
+        ${regs.map((b, i) => `<tr><td>${i + 1}</td><td><b>${esc(b.name)}</b></td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td>${attBadge(b.attended)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted" style="padding:12px 14px;font-size:13px">No registrations yet.</p>'}</div>`;
+    }).join('') : '<p class="muted">No time slots added for this date.</p>'}
+    ${can('dates') ? `<div style="text-align:right;margin-top:8px"><button class="btn btn-blue btn-sm" data-act="manageDate" data-date="${d.date}">✏️ Manage this date</button></div>` : ''}`;
+}
+
+/* ---------- CALENDAR / EXAM DATES ---------- */
+let calY = new Date().getFullYear(), calM = new Date().getMonth();
+views.calendar = {
+  render() {
+    view.innerHTML = `<div class="card box"><div class="cal-head">
+      <button class="btn btn-ghost btn-sm" data-act="calPrev">‹</button>
+      <h3 id="calTitle"></h3>
+      <button class="btn btn-ghost btn-sm" data-act="calToday">Today</button>
+      <button class="btn btn-ghost btn-sm" data-act="calNext">›</button></div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="legend"><span>Click a day to create / manage the exam.</span>
+        <span class="cp s-open" style="display:inline-block">Open</span><span class="cp s-full" style="display:inline-block">Fully booked</span>
+        <span class="cp s-closed" style="display:inline-block">Closed</span><span class="cp s-completed" style="display:inline-block">Completed</span></div></div>`;
+    this.refresh();
+  },
+  refresh() {
+    const g = $('#calGrid'); if (!g) return;
+    const first = new Date(calY, calM, 1), dim = new Date(calY, calM + 1, 0).getDate(), start = (first.getDay() + 6) % 7;
+    $('#calTitle').textContent = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const today = todayStr(), now = Date.now();
+    let h = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div class="dow">${x}</div>`).join('');
+    for (let i = 0; i < start; i++) h += '<div class="cell blank"></div>';
+    for (let day = 1; day <= dim; day++) {
+      const ds = calY + '-' + pad(calM + 1) + '-' + pad(day);
+      const d = dates.find(x => x.date === ds);
+      let pill = '';
+      if (d) {
+        const sl = slotsOf(d.id), st = dateStatus(d, sl, now), n = regsOfDate(d.id).length;
+        pill = `<span class="cp s-${st === 'today' ? 'open' : st}">${sl.length} slot${sl.length === 1 ? '' : 's'}</span><span class="cp s-${st === 'today' ? 'open' : st}" style="background:none;padding-left:0">${n} reg</span>`;
+      }
+      h += `<button class="cell ${ds < today ? 'past' : ''} ${ds === today ? 'today' : ''}" data-act="day" data-date="${ds}"><span class="cn">${day}</span>${pill}</button>`;
+    }
+    g.innerHTML = h;
+  }
+};
+function openDay(ds) { openPanel((body) => renderDay(body, ds)); }
+function renderDay(body, ds) {
+  const d = dates.find(x => x.date === ds);
+  if (!d) {
+    const past = ds < todayStr();
+    body.innerHTML = `<h2 class="mh">${fmtDate(ds)}</h2><p class="msub">No exam on this date.</p>` + (past
+      ? '<p class="muted">This date has already passed, so a new exam cannot be created.</p>'
+      : `<div class="field"><label>Exam title</label><input id="dyTitle" value="PTE Simulation Exam"/></div>
+         <div class="field"><label>Notes (optional – shown to students)</label><textarea id="dyNotes" placeholder="e.g. Venue / online link instructions"></textarea></div>
+         <button class="btn btn-primary" data-act="createDate" data-date="${ds}">＋ Create exam date</button>
+         <p class="help" style="margin-top:10px">After creating, you can add time slots.</p>`);
+    return;
+  }
+  const sl = slotsOf(d.id), st = dateStatus(d, sl);
+  body.innerHTML = `<h2 class="mh">${fmtDate(d.date)}</h2><p class="msub">${statusBadge(st)} &nbsp;${regsOfDate(d.id).length} registered in total</p>
+    <div class="row2"><div class="field"><label>Exam title</label><input id="dyTitle" value="${esc(d.title || '')}"/></div>
+      <div class="field"><label>Exam date</label><input id="dyDate" type="date" value="${d.date}"/></div></div>
+    <div class="field"><label>Notes</label><textarea id="dyNotes" style="min-height:64px">${esc(d.notes || '')}</textarea></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      <button class="btn btn-blue btn-sm" data-act="saveDate" data-id="${d.id}">💾 Save changes</button>
+      <button class="btn btn-ghost btn-sm" data-act="toggleClose" data-id="${d.id}">${d.closed ? '🔓 Re-open registration' : '🔒 Close registration'}</button>
+      <button class="btn ${d.repeatWeekly ? 'btn-primary' : 'btn-ghost'} btn-sm" data-act="toggleRepeat" data-id="${d.id}">${d.repeatWeekly ? '🔁 Repeating weekly – turn off' : '🔁 Repeat every week'}</button>
+      <button class="btn btn-danger btn-sm" data-act="delDate" data-id="${d.id}">🗑 Delete date</button></div>
+    ${d.repeatWeekly ? `<p class="help" style="margin-bottom:6px">🔁 This exam repeats every ${new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })} with these same time slots. The next ${REPEAT_WEEKS} weeks are created automatically; each day gets its own registrations and report and becomes “Completed” by itself.</p>` : ''}
+    <h3 style="margin:20px 0 10px;font-size:15px">Time slots</h3>
+    ${sl.length ? `<div class="tw"><table><thead><tr><th>Time</th><th>Seat limit</th><th>Registered</th><th></th></tr></thead><tbody>
+      ${sl.map(s => `<tr><td><b>${slotLabel(s)}</b></td><td>${s.capacity == null ? 'No limit' : s.capacity}</td><td>${regsOfSlot(s.id).length}</td>
+        <td><div class="acts"><button class="btn btn-ghost btn-sm" data-act="editSlot" data-id="${s.id}">Edit</button><button class="btn btn-danger btn-sm" data-act="delSlot" data-id="${s.id}">Delete</button></div></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted" style="margin-bottom:8px">No slots yet – add one below.</p>'}
+    <div class="card box" style="margin:14px 0 0;background:var(--soft);box-shadow:none"><h3>Add a time slot</h3>
+      <div class="fr"><div class="field"><label>Start time</label><input id="sTime" type="time"/></div>
+        <div class="field"><label>End time (optional)</label><input id="sEnd" type="time"/></div>
+        <div class="field"><label>Seat limit (optional)</label><input id="sCap" type="number" min="1" placeholder="No limit"/></div>
+        <button class="btn btn-primary" data-act="addSlot" data-id="${d.id}">＋ Add slot</button></div>
+      <p class="help">Leave seat limit empty for unlimited seats. Registration for a slot stops automatically when its start time passes. When the last slot ends, the date becomes “Completed”.</p></div>`;
+}
+function openPanel(render, wide = true) {
+  let m; const holder = {};
+  m = modal('<div class="pnl"></div>', { wide, onClose: () => { if (activePanel === holder) activePanel = null; } });
+  const body = m.$('.pnl');
+  holder.m = m; holder.render = () => render(body, m);
+  activePanel = holder; holder.render(); return holder;
+}
+const rerenderPanel = () => activePanel && activePanel.render();
+
+/* ---------- REGISTRATIONS ---------- */
+let regF = { date: '', q: '', limit: 100 };
+function regFiltered() {
+  const q = regF.q.toLowerCase();
+  return bookings.filter(b => (!regF.date || b.dateId === regF.date) &&
+    (!q || (b.name + ' ' + b.email + ' ' + b.phone).toLowerCase().includes(q)))
+    .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time) || a.name.localeCompare(b.name));
+}
+views.registrations = {
+  render() {
+    view.innerHTML = `<div class="card box"><div class="fr">
+      <div class="field grow"><label>Exam date</label><select id="rgDate" data-chg="rgDate"></select></div>
+      <div class="field grow"><label>Search</label><input id="rgQ" data-inp="rgQ" placeholder="Name, email or phone" value="${esc(regF.q)}"/></div>
+      <button class="btn btn-ghost" data-act="regCsv">⬇ CSV</button></div></div>
+      <div class="card box"><div id="rgList"></div></div>`;
+    this.refresh();
+  },
+  refresh() {
+    const sel = $('#rgDate'); if (!sel) return;
+    const opts = '<option value="">All dates</option>' + dates.slice().sort((a, b) => b.date.localeCompare(a.date)).map(d => `<option value="${d.id}" ${regF.date === d.id ? 'selected' : ''}>${fmtDate(d.date, true)} – ${esc(d.title || '')}</option>`).join('');
+    if (sel.innerHTML !== opts) sel.innerHTML = opts;
+    const list = regFiltered(), shown = list.slice(0, regF.limit);
+    $('#rgList').innerHTML = list.length ? `<p class="help" style="margin-bottom:10px">${list.length} registration${list.length === 1 ? '' : 's'}</p><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Exam</th><th>Attendance</th><th></th></tr></thead><tbody>
+      ${shown.map(b => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td>
+        <td style="white-space:nowrap">${fmtDate(b.date, true)}<br><small class="muted">${slotLabel(b)}</small></td><td>${attBadge(b.attended)}</td>
+        <td><div class="acts"><button class="btn btn-ghost btn-sm" data-act="regEdit" data-id="${b.id}">Edit</button><button class="btn btn-danger btn-sm" data-act="regDel" data-id="${b.id}">Delete</button></div></td></tr>`).join('')}
+      </tbody></table></div>${list.length > shown.length ? `<div style="text-align:center;margin-top:14px"><button class="btn btn-ghost" data-act="regMore">Show more</button></div>` : ''}`
+      : '<div class="empty">No registrations found.</div>';
+  }
+};
+
+/* ---------- ATTENDANCE ---------- */
+let attF = { date: '', q: '' };
+views.attendance = {
+  render() {
+    if (!attF.date || !dates.find(d => d.id === attF.date)) attF.date = defaultAttDate();
+    view.innerHTML = `<div class="card box"><div class="fr">
+      <div class="field grow"><label>Exam date</label><select id="atDate" data-chg="atDate"></select></div>
+      <div class="field grow"><label>Search student</label><input id="atQ" data-inp="atQ" placeholder="Name / email / phone" value="${esc(attF.q)}"/></div></div></div>
+      <div id="atList"></div>`;
+    this.refresh();
+  },
+  refresh() {
+    const sel = $('#atDate'); if (!sel) return;
+    if (!attF.date) attF.date = defaultAttDate();
+    const opts = dates.slice().sort((a, b) => b.date.localeCompare(a.date)).map(d => `<option value="${d.id}" ${attF.date === d.id ? 'selected' : ''}>${fmtDate(d.date, true)} – ${esc(d.title || '')} (${regsOfDate(d.id).length})</option>`).join('');
+    if (sel.innerHTML !== opts) sel.innerHTML = opts || '<option>No exam dates</option>';
+    const d = dates.find(x => x.id === attF.date);
+    if (!d) { $('#atList').innerHTML = '<div class="card box"><div class="empty">No exam dates yet.</div></div>'; return; }
+    const q = attF.q.toLowerCase(), sl = slotsOf(d.id);
+    $('#atList').innerHTML = sl.length ? sl.map(s => {
+      const all = regsOfSlot(s.id).sort((a, b) => a.name.localeCompare(b.name));
+      const regs = all.filter(b => !q || (b.name + b.email + b.phone).toLowerCase().includes(q));
+      const p = all.filter(b => b.attended === true).length, a = all.filter(b => b.attended === false).length;
+      return `<div class="card box"><div class="sbh" style="border-radius:10px;margin-bottom:10px"><b>⏰ ${slotLabel(s)}</b>
+        <span>✅ ${p} present · ❌ ${a} absent · ⏳ ${all.length - p - a} not marked · ${all.length} total</span></div>
+        ${all.length ? `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" data-act="attAll" data-slot="${s.id}" data-val="1">Mark all present</button><button class="btn btn-ghost btn-sm" data-act="attAll" data-slot="${s.id}" data-val="0">Clear all</button></div>` : ''}
+        ${regs.length ? `<div class="tw"><table><tbody>${regs.map(b => `<tr><td><b>${esc(b.name)}</b><br><small class="muted">${esc(b.email)} · ${esc(b.phone)}</small></td>
+          <td style="width:1%"><div class="att-btns"><button class="ab p ${b.attended === true ? 'on' : ''}" data-act="att" data-id="${b.id}" data-val="p">Present</button>
+          <button class="ab a ${b.attended === false ? 'on' : ''}" data-act="att" data-id="${b.id}" data-val="a">Absent</button></div></td></tr>`).join('')}</tbody></table></div>`
+          : `<p class="muted" style="font-size:13px">${all.length ? 'No match.' : 'No registrations for this slot.'}</p>`}</div>`;
+    }).join('') : '<div class="card box"><div class="empty">No time slots for this date.</div></div>';
+  }
+};
+function defaultAttDate() {
+  const t = todayStr();
+  const td = dates.find(d => d.date === t); if (td) return td.id;
+  const up = dates.filter(d => d.date > t).sort((a, b) => a.date.localeCompare(b.date))[0];
+  if (up) return up.id;
+  const past = dates.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
+  return past ? past.id : '';
+}
+
+/* ---------- REPORTS ---------- */
+let repMonth = todayStr().slice(0, 7);
+function buildReport(month) {
+  const ds = dates.filter(d => d.date.startsWith(month)).sort((a, b) => a.date.localeCompare(b.date));
+  const rows = ds.map(d => {
+    const items = slotsOf(d.id).map(s => {
+      const regs = regsOfSlot(s.id).sort((a, b) => a.name.localeCompare(b.name));
+      const att = regs.filter(b => b.attended === true).length, abs = regs.filter(b => b.attended === false).length;
+      return { s, regs, att, abs, nm: regs.length - att - abs };
+    });
+    const sum = k => items.reduce((a, i) => a + i[k], 0);
+    const caps = items.map(i => i.s.capacity);
+    return { d, items, reg: items.reduce((a, i) => a + i.regs.length, 0), att: sum('att'), abs: sum('abs'), nm: sum('nm'),
+      cap: items.length && caps.every(c => c != null) ? caps.reduce((a, b) => a + b, 0) : null };
+  });
+  const t = { dates: rows.length, slots: rows.reduce((a, r) => a + r.items.length, 0), reg: 0, att: 0, abs: 0, nm: 0 };
+  rows.forEach(r => { t.reg += r.reg; t.att += r.att; t.abs += r.abs; t.nm += r.nm; });
+  t.rate = t.att + t.abs ? Math.round(t.att / (t.att + t.abs) * 100) : null;
+  return { month, rows, t };
+}
+views.reports = {
+  render() {
+    view.innerHTML = `<div class="card box"><div class="fr"><div class="field"><label>Month</label><input type="month" id="repM" data-chg="repM" value="${repMonth}"/></div>
+      <button class="btn btn-primary" data-act="repPdf">⬇ Download PDF report</button></div>
+      <p class="help" style="margin-top:8px">Includes exam dates, time slots, registrations and full attendance analysis for the selected month.</p></div><div id="repOut"></div>`;
+    this.refresh();
+  },
+  refresh() {
+    const out = $('#repOut'); if (!out) return;
+    if (!repMonth) { out.innerHTML = ''; return; }
+    const r = buildReport(repMonth), t = r.t;
+    out.innerHTML = `<div class="stats">
+      <div class="card stat"><i>📅</i><div><b>${t.dates}</b><span>Exam dates</span></div></div>
+      <div class="card stat"><i>⏰</i><div><b>${t.slots}</b><span>Time slots</span></div></div>
+      <div class="card stat"><i>👥</i><div><b>${t.reg}</b><span>Registrations</span></div></div>
+      <div class="card stat"><i style="background:rgba(18,161,80,.12)">✅</i><div><b>${t.att}</b><span>Present</span></div></div>
+      <div class="card stat"><i style="background:rgba(192,0,26,.1)">❌</i><div><b>${t.abs}</b><span>Absent</span></div></div>
+      <div class="card stat"><i>📈</i><div><b>${t.rate == null ? '—' : t.rate + '%'}</b><span>Attendance rate</span></div></div></div>
+      <div class="card box"><h3>${monthLabel(repMonth)} – by date</h3>${r.rows.length ? `<div class="tw"><table><thead><tr><th>Date</th><th>Slots</th><th>Seats</th><th>Registered</th><th>Present</th><th>Absent</th><th>Not marked</th><th>Status</th></tr></thead><tbody>
+      ${r.rows.map(x => `<tr><td><b>${fmtDate(x.d.date, true)}</b></td><td>${x.items.map(i => fmtTime(i.s.time)).join(', ') || '—'}</td><td>${x.cap == null ? '∞' : x.cap}</td><td>${x.reg}</td><td>${x.att}</td><td>${x.abs}</td><td>${x.nm}</td><td>${statusBadge(dateStatus(x.d, slotsOf(x.d.id)))}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty">No exam dates in this month.</div>'}</div>`;
+  }
+};
+function downloadReportPDF(month) {
+  if (!window.jspdf) { toast('PDF library did not load (check internet)', 'err'); return; }
+  const rep = buildReport(month), t = rep.t;
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  doc.setFillColor(6, 24, 47); doc.rect(0, 0, W, 72, 'F'); doc.setFillColor(192, 0, 26); doc.rect(0, 72, W, 4, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('MENTOBEAM', 40, 40);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Yes For PTE  |  Simulation Exam Report', 40, 58);
+  doc.setTextColor(6, 24, 47); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('Monthly Report - ' + monthLabel(month), 40, 106);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90, 107, 130);
+  doc.text('Generated ' + new Date().toLocaleString('en-GB') + ' by ' + (me.name || me.email), 40, 120);
+  doc.autoTable({
+    startY: 134, head: [['Summary', 'Value']], theme: 'grid',
+    body: [['Exam dates', t.dates], ['Time slots', t.slots], ['Total registrations', t.reg], ['Present', t.att], ['Absent', t.abs], ['Attendance not marked', t.nm], ['Attendance rate (of marked)', t.rate == null ? '-' : t.rate + '%']],
+    headStyles: { fillColor: [11, 61, 145] }, styles: { fontSize: 9.5 }, columnStyles: { 0: { cellWidth: 220 } }
+  });
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 18, theme: 'grid', styles: { fontSize: 8.5 }, headStyles: { fillColor: [6, 24, 47] },
+    head: [['Date', 'Slots (start times)', 'Seats', 'Registered', 'Present', 'Absent', 'Not marked']],
+    body: rep.rows.map(r => [fmtDate(r.d.date, true), r.items.map(i => fmtTime(i.s.time)).join(', ') || '-', r.cap == null ? 'No limit' : r.cap, r.reg, r.att, r.abs, r.nm])
+  });
+  rep.rows.forEach(r => {
+    doc.addPage();
+    doc.setTextColor(6, 24, 47); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text(fmtDate(r.d.date) + '  -  ' + (r.d.title || 'PTE Simulation Exam'), 40, 50);
+    let y = 62;
+    if (!r.items.length) { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('No time slots.', 40, y + 14); return; }
+    r.items.forEach(i => {
+      doc.autoTable({
+        startY: y, theme: 'striped', styles: { fontSize: 8.5 }, headStyles: { fillColor: [11, 61, 145] },
+        head: [[{ content: 'Slot ' + slotLabel(i.s) + '   |   ' + i.regs.length + ' registered, ' + i.att + ' present, ' + i.abs + ' absent', colSpan: 5 }], ['#', 'Name', 'Email', 'Phone', 'Attendance']],
+        body: i.regs.length ? i.regs.map((b, n) => [n + 1, b.name, b.email, b.phone, b.attended === true ? 'Present' : b.attended === false ? 'Absent' : 'Not marked']) : [[{ content: 'No registrations', colSpan: 5 }]]
+      });
+      y = doc.lastAutoTable.finalY + 14;
+    });
+  });
+  const n = doc.getNumberOfPages();
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140);
+    doc.text('MentoBeam - Yes For PTE', 40, doc.internal.pageSize.getHeight() - 20);
+    doc.text('Page ' + p + ' / ' + n, W - 40, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
+  }
+  doc.save('MentoBeam-report-' + month + '.pdf');
+}
+
+/* ---------- WEBSITE CONTENT ---------- */
+let siteData = {}, galDocs = [];
+views.content = {
+  async render() {
+    view.innerHTML = '<div class="empty"><div class="spin dark"></div></div>';
+    try {
+      const [s, g] = await Promise.all([db.collection('settings').doc('site').get(), db.collection('gallery').orderBy('order').get()]);
+      siteData = s.exists ? s.data() : {}; galDocs = g.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) { view.innerHTML = '<div class="empty">' + esc(errMsg(e)) + '</div>'; return; }
+    if (current !== 'content') return;
+    this.paint();
+  },
+  paint() {
+    const s = siteData;
+    view.innerHTML = `<div class="card box"><h3>Main page text</h3>
+      <div class="field"><label>Hero title</label><input id="ctHero" value="${esc(s.heroTitle || '')}" placeholder="Welcome to the MentoBeam PTE Simulation Exam"/></div>
+      <div class="field"><label>Welcome message</label><textarea id="ctWelcome" placeholder="Short welcome message for students">${esc(s.welcomeMsg || '')}</textarea></div>
+      <div class="field"><label>Announcement banner (optional)</label><input id="ctAnn" value="${esc(s.announcement || '')}" placeholder="e.g. New exam dates added for December!"/></div>
+      <div class="field"><label>Exam description</label><textarea id="ctDesc" style="min-height:120px">${esc(s.description || '')}</textarea></div>
+      <div class="field"><label>Exam rules (one rule per line)</label><textarea id="ctRules" style="min-height:150px">${esc(s.rules || '')}</textarea></div>
+      <div class="field"><label>Contact / footer text</label><textarea id="ctContact" style="min-height:64px" placeholder="Phone, WhatsApp, address...">${esc(s.contact || '')}</textarea></div>
+      <button class="btn btn-primary" data-act="contentSave">💾 Save content</button></div>
+      <div class="card box"><h3>Exam photos <span class="muted" style="font-size:13px;font-weight:600">(${galDocs.length}/12)</span></h3>
+        <p class="help" style="margin-bottom:10px">Photos are compressed automatically. They are shown on the student page.</p>
+        <input type="file" id="photoIn" accept="image/*" multiple style="display:none"/>
+        <button class="btn btn-blue" data-act="photoPick">📁 Upload photos</button>
+        <div class="gthumbs">${galDocs.map(g => `<div class="gt"><img src="${g.data}" alt=""/><div><input value="${esc(g.caption || '')}" placeholder="Caption" data-chg="photoCap" data-id="${g.id}"/>
+          <button class="btn btn-danger btn-sm" data-act="photoDel" data-id="${g.id}">✕</button></div></div>`).join('')}</div></div>`;
+    $('#photoIn').onchange = e => uploadPhotos(e.target.files);
+  }
+};
+function compressToDataUrl(file, maxPx = 1000) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader(); fr.onerror = rej;
+    fr.onload = () => {
+      const img = new Image(); img.onerror = rej;
+      img.onload = () => {
+        let { width: w, height: h } = img; const r = Math.min(1, maxPx / Math.max(w, h));
+        w = Math.round(w * r); h = Math.round(h * r);
+        const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h);
+        let q = .8, out = c.toDataURL('image/jpeg', q);
+        while (out.length > 260000 && q > .4) { q -= .1; out = c.toDataURL('image/jpeg', q); }
+        res(out);
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function uploadPhotos(files) {
+  const arr = Array.from(files || []).filter(f => f.type.startsWith('image/'));
+  if (!arr.length) return;
+  if (galDocs.length + arr.length > 12) { toast('Maximum 12 photos allowed', 'err'); return; }
+  toast('Compressing & uploading…');
+  try {
+    for (const f of arr) {
+      const data = await compressToDataUrl(f);
+      const ref = await db.collection('gallery').add({ data, caption: '', order: Date.now(), size: data.length });
+      galDocs.push({ id: ref.id, data, caption: '', order: Date.now() });
+    }
+    toast('Photos uploaded', 'ok'); views.content.paint(); computeStorage();
+  } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+/* ---------- STORAGE ---------- */
+let stMonth = '', stEarlier = false;
+const monthsAvail = () => [...new Set([...dates.map(d => d.date.slice(0, 7)), ...rentBookings.map(b => (b.date || '').slice(0, 7)).filter(Boolean)])].sort().reverse();
+function cleanupTargets() {
+  const match = ds => stEarlier ? ds.slice(0, 7) <= stMonth : ds.slice(0, 7) === stMonth;
+  return { ds: dates.filter(d => match(d.date)), sl: slots.filter(s => match(s.date)), bk: bookings.filter(b => match(b.date)), rb: rentBookings.filter(b => match(b.date || '')) };
+}
+views.storage = {
+  render() {
+    view.innerHTML = '<div id="stBox"></div>';
+    if (!storageInfo) computeStorage();
+    this.refresh();
+  },
+  refresh() {
+    const box = $('#stBox'); if (!box) return;
+    const ms = monthsAvail(); if (!stMonth || !ms.includes(stMonth)) stMonth = ms[0] || '';
+    const si = storageInfo, p = storagePct(), cls = p >= .95 ? 'crit' : p >= .8 ? 'warn' : '';
+    const tg = stMonth ? cleanupTargets() : { ds: [], sl: [], bk: [], rb: [] };
+    box.innerHTML = `${storageBanner()}
+      <div class="card box"><h3>Database storage</h3>
+        ${si ? `<div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:8px"><span>${fmtBytes(si.used)} used</span><span class="muted">of ${fmtBytes(si.limit)} (${(p * 100).toFixed(p < .1 ? 2 : 1)}%)</span></div>
+        <div class="sbar"><i class="${cls}" style="width:${Math.max(1, Math.min(100, p * 100))}%"></i></div>
+        <div class="parts">${Object.entries(si.parts).map(([k, v]) => `<div class="part"><b>${fmtBytes(v)}</b><span>${k}</span></div>`).join('')}</div>` : '<div class="empty"><div class="spin dark"></div></div>'}
+        <div class="fr" style="margin-top:16px"><div class="field"><label>Storage limit (MB)</label><input id="stLimit" type="number" min="50" value="${Math.round(getLimit() / 1048576)}" style="max-width:150px"/></div>
+          <button class="btn btn-ghost" data-act="stLimit">Set</button><button class="btn btn-ghost" data-act="stCalc">↻ Recalculate</button></div>
+        <p class="help" style="margin-top:8px">Estimate based on stored document sizes. Firebase free plan gives about 1 GB (1024 MB). Warnings appear at 80% and 95%.</p></div>
+      <div class="card box"><h3>🧹 Delete old data (by month)</h3>
+        <p class="muted" style="font-size:13.5px;margin-bottom:12px">Deletes only <b>exam dates, time slots, student registrations and rental bookings</b> of the chosen month. Admin accounts and website settings are never deleted. Your admin password is required.</p>
+        ${ms.length ? `<div class="fr"><div class="field"><label>Month</label><select id="stMonth" data-chg="stMonth">${ms.map(m => `<option value="${m}" ${m === stMonth ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select></div>
+          <label class="chk" style="margin:0 0 10px"><input type="checkbox" id="stEarlier" data-chg="stEarlier" ${stEarlier ? 'checked' : ''}/> Include all earlier months too</label></div>
+          <div class="parts" style="margin:6px 0 14px"><div class="part"><b>${tg.ds.length}</b><span>Exam dates</span></div><div class="part"><b>${tg.sl.length}</b><span>Time slots</span></div><div class="part"><b>${tg.bk.length}</b><span>Registrations</span></div><div class="part"><b>${tg.rb.length}</b><span>Rental bookings</span></div></div>
+          <button class="btn btn-primary" data-act="stDelete" ${tg.ds.length + tg.sl.length + tg.bk.length + tg.rb.length ? '' : 'disabled'}>🗑 Delete selected data…</button>`
+          : '<div class="empty">No data to delete.</div>'}</div>`;
+  }
+};
+
+/* ---------- ADMINS ---------- */
+let adminList = [];
+views.admins = {
+  async render() {
+    view.innerHTML = '<div class="empty"><div class="spin dark"></div></div>';
+    await this.load(); },
+  async load() {
+    try { const s = await db.collection('admins').get(); adminList = s.docs.map(d => ({ id: d.id, ...d.data() })); }
+    catch (e) { view.innerHTML = '<div class="empty">' + esc(errMsg(e)) + '</div>'; return; }
+    if (current !== 'admins') return;
+    adminList.sort((a, b) => (b.founder ? 1 : 0) - (a.founder ? 1 : 0) || (a.createdAt || 0) - (b.createdAt || 0));
+    view.innerHTML = `<div class="card box"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><h3 style="margin:0">Admin accounts (${adminList.length})</h3>
+      <button class="btn btn-primary" data-act="adminAdd">＋ Add admin</button></div>
+      <div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th></th></tr></thead><tbody>
+      ${adminList.map(a => `<tr><td><b>${esc(a.name || '')}</b>${a.founder ? ' <span class="badge b-red">Founder</span>' : ''}${a.id === me.id ? ' <span class="badge b-blue">You</span>' : ''}</td><td>${esc(a.email || '')}</td>
+        <td>${a.role === 'super' ? '<span class="badge b-blue">Super admin</span>' : '<span class="badge b-gray">Admin</span>'}</td>
+        <td><div class="pt">${a.role === 'super' ? '<span class="badge b-ok">Everything</span>' : Object.keys(PERMS).filter(k => a.perms && a.perms[k]).map(k => `<span class="badge b-gray">${k}</span>`).join('') || '<span class="muted">Dashboard only</span>'}</div></td>
+        <td><div class="acts"><button class="btn btn-ghost btn-sm" data-act="adminEdit" data-id="${a.id}">Edit</button>
+        ${a.id !== me.id ? `<button class="btn btn-danger btn-sm" data-act="adminDel" data-id="${a.id}">Delete</button>` : ''}</div></td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="help" style="margin-top:12px">Deleting an admin removes their access and their record from the database. The founder can only be deleted with the master delete password.</p></div>`;
+  }
+};
+function permBoxes(sel = {}) {
+  return `<div class="perms">${Object.entries(PERMS).map(([k, v]) => `<label><input type="checkbox" data-perm="${k}" ${sel[k] ? 'checked' : ''}/> ${v}</label>`).join('')}</div>`;
+}
+function readPerms(root) { const p = {}; $$('[data-perm]', root).forEach(c => p[c.dataset.perm] = c.checked); return p; }
+async function createAuthUser(email, pw) {
+  const app = firebase.initializeApp(firebaseConfig, 'sec' + Date.now());
+  try {
+    const a = app.auth();
+    try { return (await a.createUserWithEmailAndPassword(email, pw)).user.uid; }
+    catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        try { return (await a.signInWithEmailAndPassword(email, pw)).user.uid; }
+        catch (e2) { throw new Error('This email already has an account with a different password. Use the same password or another email.'); }
+      }
+      throw e;
+    }
+  } finally { try { await app.auth().signOut(); } catch (_) { /* ignore */ } await app.delete(); }
+}
+
+/* ====================== GOOGLE SHEET SYNC ====================== */
+const GAS_CODE = "/**\n * MentoBeam \u2013 Exam + Rental bookings -> Google Sheet auto-sync\n *\n * HOW TO USE (also shown inside Admin Panel -> Google Sheet):\n *  1. Create a BLANK Google Sheet.\n *  2. Extensions -> Apps Script -> delete everything -> paste this whole file -> Save.\n *  3. Deploy -> New deployment -> type \"Web app\"\n *       Execute as: Me      |   Who has access: Anyone\n *     -> Deploy -> Authorize -> copy the Web app URL (ends with /exec).\n *  4. Paste that URL in Admin Panel -> Google Sheet -> Save & Connect.\n *\n * The script never trusts the data it receives. The website only sends booking /\n * exam-date IDs; this script reads the real record from Firestore and writes it\n * to the sheet. Nothing is ever deleted from the sheet by the website\n * (cancelled bookings are only marked \"Cancelled\"), so clearing old data from\n * the database never clears the sheet.\n */\n\nvar FIREBASE_PROJECT_ID = '__PROJECT_ID__';\nvar FIREBASE_API_KEY = '__API_KEY__';   // public web key of your Firebase app (same one as in common.js)\nvar TIMEZONE = 'Asia/Colombo';\nvar OVERVIEW_TAB = 'Overview';\n\nvar HEAD = 3;          // header row\nvar FIRST = 4;         // first data row\nvar MAXROWS = 1000;\nvar HEADERS = ['No', 'Name', 'Email', 'Phone', 'Exam Date', 'Start Time', 'End Time', 'Attendance', 'Status', 'Registered At', 'Booking Code'];\nvar NC = HEADERS.length;\nvar COL_START = 6, COL_ATT = 8, COL_STATUS = 9, COL_REG = 10, COL_CODE = 11;\nvar NAVY = '#06182f', BLUE = '#0b3d91', RED = '#c0001a';\n\n/* ============================ entry points ============================ */\nfunction doGet() {\n  return out_({ ok: true, service: 'MentoBeam sheet sync', time: new Date().toISOString() });\n}\n\nfunction doPost(e) {\n  var lock = LockService.getScriptLock();\n  try {\n    lock.waitLock(30000);\n    var p = JSON.parse((e && e.postData && e.postData.contents) || '{}');\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    switch (p.action) {\n      case 'ping':  return out_({ ok: true, name: ss.getName(), url: ss.getUrl() });\n      case 'setup': return out_(setup_(ss));\n      case 'index': return out_(index_(ss));\n      case 'sync':  return out_(sync_(ss, p));\n      case 'rent':  return out_(rent_(ss, p));\n      case 'rentSpaces': return out_(rentSpaces_(ss, p));\n      case 'rentIndex':  return out_(rentIndex_(ss));\n      default:      return out_({ ok: false, error: 'Unknown action' });\n    }\n  } catch (err) {\n    return out_({ ok: false, code: (err && err.code) || 'E_SCRIPT', detail: (err && err.detail) || '', error: String((err && err.message) || err) });\n  } finally {\n    try { lock.releaseLock(); } catch (x) { /* not locked */ }\n  }\n}\n\nfunction out_(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n\n/* ============================ setup / index ============================ */\nfunction setup_(ss) {\n  ss.setSpreadsheetTimeZone(TIMEZONE);\n  if (!ss.getSheetByName(OVERVIEW_TAB)) {\n    var sheets = ss.getSheets();\n    if (sheets.length === 1 && sheets[0].getLastRow() === 0) sheets[0].setName(OVERVIEW_TAB);\n    else ss.insertSheet(OVERVIEW_TAB, 0);\n  }\n  rebuildOverview_(ss);\n  return { ok: true, name: ss.getName(), url: ss.getUrl() };\n}\n\n// which booking codes / exam dates already exist in the sheet (used by the admin panel to auto-fill gaps)\nfunction index_(ss) {\n  var codes = [], dateIds = [];\n  dateSheets_(ss).forEach(function (x) {\n    dateIds.push(x.id);\n    var last = x.sh.getLastRow();\n    if (last >= FIRST) {\n      x.sh.getRange(FIRST, COL_CODE, last - FIRST + 1, 1).getValues().forEach(function (r) { if (r[0]) codes.push(String(r[0])); });\n    }\n  });\n  return { ok: true, codes: codes, dateIds: dateIds };\n}\n\n/* ============================ main sync ============================ */\nfunction sync_(ss, p) {\n  var res = { ok: true, dates: 0, added: 0, updated: 0, moved: 0, cancelled: 0 };\n  if (ss.getSpreadsheetTimeZone() !== TIMEZONE) ss.setSpreadsheetTimeZone(TIMEZONE);\n\n  var dIds = uniq_(p.dateIds), bIds = uniq_(p.bookingIds), tok = String(p.token || '');\n  var recB = (p.records && p.records.bookings) || {}, recD = (p.records && p.records.dates) || {}, gone = uniq_(p.gone);\n  var bDocs;\n  try { bDocs = fetchDocs_('bookings', bIds, tok); }\n  catch (e) {\n    // Firestore refused the direct read -> use the data sent from the website page instead\n    bDocs = payloadBookings_(bIds, recB, gone);\n    var any = false; bIds.forEach(function (id) { if (bDocs[id] !== undefined) any = true; });\n    if (bIds.length && !any) throw e;\n    res.warn = e.code;\n  }\n\n  // exam dates we need: the ones asked for + the ones the bookings belong to\n  var need = dIds.slice();\n  bIds.forEach(function (id) {\n    var b = bDocs[id];\n    if (b && b.dateId && need.indexOf(b.dateId) < 0) need.push(b.dateId);\n  });\n  var dDocs = {}, warn = '', warnErr = null;\n  try { dDocs = fetchDocs_('examDates', need, tok); }\n  catch (e) {   // not fatal: use the date sent by the page, or what the booking itself carries (date + exam title)\n    warn = e.code || 'E_READ_EXAMDATES'; warnErr = e;\n    need.forEach(function (id) { if (recD[id]) dDocs[id] = { date: String(recD[id].date || ''), title: String(recD[id].title || '') }; });\n  }\n\n  var map = {};\n  dateSheets_(ss).forEach(function (x) { map[x.id] = x.sh; });\n\n  var dirty = false;\n  need.forEach(function (id) {\n    var d = dDocs[id];\n    if (!d) {   // date record gone -> fall back to what the booking knows\n      bIds.some(function (bid) {\n        var b = bDocs[bid];\n        if (b && b.dateId === id) { d = { date: b.date, title: b.examTitle }; return true; }\n        return false;\n      });\n    }\n    if (!d || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(d.date))) return;\n    if (ensureTab_(ss, map, id, d)) dirty = true;\n    res.dates++;\n  });\n\n  if (warn && dIds.length && !res.dates) throw warnErr;\n  if (warn) res.warn = warn;\n\n  if (bIds.length) {\n    var hits = locate_(ss, map, bIds);\n    var plan = {};\n    var P = function (sh) { var k = sh.getSheetId(); return plan[k] || (plan[k] = { sh: sh, upd: [], add: [], del: [], cancel: [] }); };\n\n    bIds.forEach(function (id) {\n      var b = bDocs[id], hit = hits[id];\n      if (b === undefined) return;                                   // invalid id\n      if (b === null) {                                              // booking no longer exists -> keep row, mark cancelled\n        if (hit) { P(hit.sh).cancel.push(hit.row); res.cancelled++; }\n        return;\n      }\n      var tgt = map[b.dateId];\n      if (!tgt || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(b.date))) return;\n      var vals = rowVals_(id, b);\n      if (hit && hit.sh.getSheetId() === tgt.getSheetId()) { P(tgt).upd.push({ row: hit.row, vals: vals }); res.updated++; }\n      else {\n        if (hit) { P(hit.sh).del.push(hit.row); res.moved++; }       // moved to another exam date\n        P(tgt).add.push(vals); res.added++;\n      }\n    });\n\n    Object.keys(plan).forEach(function (k) {\n      var t = plan[k], sh = t.sh;\n      t.upd.forEach(function (u) { sh.getRange(u.row, 1, 1, NC).setValues([u.vals]); });\n      t.cancel.forEach(function (r) { sh.getRange(r, COL_STATUS).setValue('Cancelled'); });\n      t.del.sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });\n      if (t.add.length) {\n        var last = Math.max(sh.getLastRow(), HEAD);\n        var short = last + t.add.length - sh.getMaxRows();\n        if (short > 0) sh.insertRowsAfter(sh.getMaxRows(), short + 200);\n        sh.getRange(last + 1, 1, t.add.length, NC).setValues(t.add);\n      }\n      finalize_(sh);\n    });\n  }\n\n  if (dirty) rebuildOverview_(ss);\n  return res;\n}\n\n/* ============================ Firestore (read-only REST) ============================ */\n// bookings sent by the page (only used when Firestore refuses the script's own read)\nfunction payloadBookings_(ids, rec, gone) {\n  var out = {};\n  ids.forEach(function (id) {\n    if (gone.indexOf(id) >= 0) { out[id] = null; return; }\n    var r = rec[id];\n    if (!r) return;\n    out[id] = {\n      name: String(r.name || ''), email: String(r.email || ''), phone: String(r.phone || ''),\n      dateId: String(r.dateId || ''), date: String(r.date || ''), time: String(r.time || ''),\n      endTime: r.endTime ? String(r.endTime) : null, createdAt: Number(r.createdAt) || 0,\n      attended: r.attended === true ? true : r.attended === false ? false : null, examTitle: String(r.examTitle || '')\n    };\n  });\n  return out;\n}\n\nfunction coded_(code, msg, detail) { var e = new Error(msg); e.code = code; e.detail = detail || ''; return e; }\n\n// reads documents from Firestore. With an admin token it reads as that admin, otherwise as a public visitor\nfunction fetchDocs_(coll, ids, token) {\n  var out = {};\n  var base = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID + '/databases/(default)/documents/' + coll + '/';\n  var list = ids.filter(function (id) { return /^[A-Za-z0-9_-]{4,64}$/.test(id); });\n  for (var i = 0; i < list.length; i += 30) {\n    var chunk = list.slice(i, i + 30);\n    var rs = UrlFetchApp.fetchAll(chunk.map(function (id) {\n      var q = { url: base + id + (FIREBASE_API_KEY && FIREBASE_API_KEY.indexOf('__') !== 0 ? '?key=' + encodeURIComponent(FIREBASE_API_KEY) : ''), muteHttpExceptions: true };\n      if (token) q.headers = { Authorization: 'Bearer ' + token };\n      return q;\n    }));\n    rs.forEach(function (r, k) {\n      var c = r.getResponseCode();\n      if (c === 200) out[chunk[k]] = docToObj_(JSON.parse(r.getContentText()));\n      else if (c === 404) out[chunk[k]] = null;\n      else {\n        var why = '';\n        try { var j = JSON.parse(r.getContentText()); why = (j.error && (j.error.status + ': ' + j.error.message)) || ''; } catch (x) { why = String(r.getContentText()).slice(0, 200); }\n        throw coded_('E_READ_' + coll.toUpperCase() + '_' + c, 'Could not read ' + coll + ' (HTTP ' + c + ')', why.slice(0, 300));\n      }\n    });\n  }\n  return out;\n}\n\nfunction val_(v) {\n  if (!v) return null;\n  if ('stringValue' in v) return v.stringValue;\n  if ('integerValue' in v) return Number(v.integerValue);\n  if ('doubleValue' in v) return v.doubleValue;\n  if ('booleanValue' in v) return v.booleanValue;\n  if ('timestampValue' in v) return v.timestampValue;\n  if ('arrayValue' in v) return (v.arrayValue.values || []).map(val_);\n  if ('mapValue' in v) { var o = {}, f = v.mapValue.fields || {}; Object.keys(f).forEach(function (k) { o[k] = val_(f[k]); }); return o; }\n  return null;\n}\nfunction docToObj_(d) {\n  var o = {}, f = (d && d.fields) || {};\n  Object.keys(f).forEach(function (k) { o[k] = val_(f[k]); });\n  return o;\n}\n\n/* ============================ sheet helpers ============================ */\nfunction uniq_(a) {\n  var seen = {}, out = [];\n  (a || []).forEach(function (x) { x = String(x); if (x && !seen[x]) { seen[x] = 1; out.push(x); } });\n  return out;\n}\n\nfunction dateSheets_(ss) {\n  var out = [];\n  ss.createDeveloperMetadataFinder().withKey('dateId').find().forEach(function (m) {\n    var loc = m.getLocation();\n    if (loc.getLocationType() === SpreadsheetApp.DeveloperMetadataLocationType.SHEET) out.push({ sh: loc.getSheet(), id: m.getValue() });\n  });\n  return out;\n}\nfunction getMeta_(sh, key) {\n  var m = sh.createDeveloperMetadataFinder().withKey(key).find();\n  return m.length ? m[0].getValue() : null;\n}\nfunction setMeta_(sh, key, val) {\n  var m = sh.createDeveloperMetadataFinder().withKey(key).find();\n  if (m.length) m[0].setValue(val); else sh.addDeveloperMetadata(key, val);\n}\n\n// find existing rows of the given booking codes\nfunction locate_(ss, map, ids) {\n  var hits = {}, isDate = {};\n  Object.keys(map).forEach(function (k) { isDate[map[k].getSheetId()] = true; });\n  if (ids.length <= 5) {\n    ids.forEach(function (id) {\n      ss.createTextFinder(id).matchEntireCell(true).matchCase(true).findAll().some(function (r) {\n        if (isDate[r.getSheet().getSheetId()] && r.getColumn() === COL_CODE && r.getRow() >= FIRST) { hits[id] = { sh: r.getSheet(), row: r.getRow() }; return true; }\n        return false;\n      });\n    });\n  } else {\n    Object.keys(map).forEach(function (k) {\n      var sh = map[k], last = sh.getLastRow();\n      if (last < FIRST) return;\n      sh.getRange(FIRST, COL_CODE, last - FIRST + 1, 1).getValues().forEach(function (r, i) {\n        if (r[0] && !hits[r[0]]) hits[r[0]] = { sh: sh, row: FIRST + i };\n      });\n    });\n  }\n  return hits;\n}\n\nfunction dateObj_(s) { return Utilities.parseDate(s + ' 12:00:00', TIMEZONE, 'yyyy-MM-dd HH:mm:ss'); }\nfunction longDate_(s) { return Utilities.formatDate(dateObj_(s), TIMEZONE, 'EEEE, dd MMM yyyy'); }\nfunction tabBase_(s) { return Utilities.formatDate(dateObj_(s), TIMEZONE, 'yyyy-MM-dd EEE'); }\nfunction frac_(t) { if (!t) return ''; var a = String(t).split(':'); return (Number(a[0]) * 60 + Number(a[1] || 0)) / 1440; }\nfunction attLabel_(v) { return v === true ? 'Present' : v === false ? 'Absent' : 'Not marked'; }\nfunction uniqueName_(ss, base, self) {\n  var name = base, n = 2;\n  for (;;) {\n    var ex = ss.getSheetByName(name);\n    if (!ex || (self && ex.getSheetId() === self.getSheetId())) return name;\n    name = base + ' (' + n++ + ')';\n  }\n}\n\nfunction rowVals_(id, b) {\n  return ['', b.name || '', b.email || '', String(b.phone || ''), dateObj_(b.date), frac_(b.time), frac_(b.endTime),\n    attLabel_(b.attended), 'Booked', new Date(Number(b.createdAt) || Date.now()), id];\n}\n\n// sort by start time, then by registration time, and renumber\nfunction finalize_(sh) {\n  var n = sh.getLastRow() - HEAD;\n  if (n < 1) return;\n  sh.getRange(FIRST, 1, n, NC).sort([{ column: COL_START, ascending: true }, { column: COL_REG, ascending: true }]);\n  var nums = [];\n  for (var i = 1; i <= n; i++) nums.push([i]);\n  sh.getRange(FIRST, 1, n, 1).setValues(nums);\n}\n\n// create the tab for an exam date (or rename / re-title it). returns true when the Overview needs a refresh\nfunction ensureTab_(ss, map, dateId, d) {\n  var sh = map[dateId], dirty = false, base = tabBase_(d.date), title = d.title || 'PTE Simulation Exam';\n  if (!sh) {\n    sh = ss.insertSheet(uniqueName_(ss, base, null));\n    sh.addDeveloperMetadata('dateId', dateId);\n    formatTab_(sh);\n    map[dateId] = sh; dirty = true;\n  } else if (sh.getName().indexOf(base) !== 0) {\n    sh.setName(uniqueName_(ss, base, sh)); dirty = true;\n  }\n  if (getMeta_(sh, 'date') !== d.date || getMeta_(sh, 'title') !== title) dirty = true;\n  setMeta_(sh, 'date', d.date); setMeta_(sh, 'title', title);\n  sh.getRange(1, 1).setValue(title + '   \\u2014   ' + longDate_(d.date));\n  return dirty;\n}\n\n/* ============================ auto format ============================ */\nfunction formatTab_(sh) {\n  if (sh.getMaxColumns() > NC) sh.deleteColumns(NC + 1, sh.getMaxColumns() - NC);\n  if (sh.getMaxRows() < MAXROWS) sh.insertRowsAfter(sh.getMaxRows(), MAXROWS - sh.getMaxRows());\n  sh.setHiddenGridlines(true);\n  sh.setFrozenRows(HEAD);\n\n  // title banner\n  sh.getRange(1, 1, 1, NC).merge().setBackground(NAVY).setFontColor('#ffffff').setFontSize(15).setFontWeight('bold')\n    .setHorizontalAlignment('left').setVerticalAlignment('middle');\n  sh.setRowHeight(1, 44);\n\n  // live summary\n  sh.getRange(2, 1, 1, NC).merge().setBackground('#eef3fb').setFontColor(NAVY).setFontWeight('bold')\n    .setHorizontalAlignment('left').setVerticalAlignment('middle');\n  sh.getRange(2, 1).setFormula('=\"Registered: \"&COUNTIF($I$4:$I,\"Booked\")&\"      Present: \"&COUNTIF($H$4:$H,\"Present\")&\"      Absent: \"&COUNTIF($H$4:$H,\"Absent\")&\"      Cancelled: \"&COUNTIF($I$4:$I,\"Cancelled\")');\n  sh.setRowHeight(2, 30);\n\n  // header\n  sh.getRange(HEAD, 1, 1, NC).setValues([HEADERS]).setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold')\n    .setHorizontalAlignment('center').setVerticalAlignment('middle');\n  sh.setRowHeight(HEAD, 32);\n\n  // columns\n  [50, 190, 230, 130, 160, 95, 95, 110, 100, 175, 230].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });\n  var rows = MAXROWS - HEAD + 1, body = MAXROWS - FIRST + 1;\n  [2, 3, 4, 8, 9, 11].forEach(function (c) { sh.getRange(FIRST, c, body, 1).setNumberFormat('@'); });   // plain text (keeps 07x phone numbers)\n  sh.getRange(FIRST, 5, body, 1).setNumberFormat('ddd, dd mmm yyyy');\n  sh.getRange(FIRST, 6, body, 2).setNumberFormat('h:mm AM/PM');\n  sh.getRange(FIRST, 10, body, 1).setNumberFormat('dd mmm yyyy, h:mm AM/PM');\n  [1, 5, 6, 7, 8, 9].forEach(function (c) { sh.getRange(FIRST, c, body, 1).setHorizontalAlignment('center'); });\n  sh.getRange(HEAD, 1, rows, NC).setBorder(true, true, true, true, true, true, '#d5dbe6', SpreadsheetApp.BorderStyle.SOLID)\n    .setVerticalAlignment('middle');\n\n  // colours: cancelled rows grey, present green, absent red, zebra stripes\n  var all = sh.getRange(FIRST, 1, body, NC), att = sh.getRange(FIRST, COL_ATT, body, 1);\n  var R = function () { return SpreadsheetApp.newConditionalFormatRule(); };\n  sh.setConditionalFormatRules([\n    R().whenFormulaSatisfied('=$I4=\"Cancelled\"').setFontColor('#9aa6b8').setStrikethrough(true).setBackground('#f1f2f5').setRanges([all]).build(),\n    R().whenTextEqualTo('Present').setBackground('#d9f5e4').setFontColor('#0e7a3d').setRanges([att]).build(),\n    R().whenTextEqualTo('Absent').setBackground('#fde3e6').setFontColor('#b00020').setRanges([att]).build(),\n    R().whenFormulaSatisfied('=AND($B4<>\"\",ISEVEN(ROW()))').setBackground('#f6f8fd').setRanges([all]).build()\n  ]);\n}\n\nfunction rebuildOverview_(ss) {\n  var sh = ss.getSheetByName(OVERVIEW_TAB) || ss.insertSheet(OVERVIEW_TAB, 0);\n  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();\n  sh.clear(); sh.clearConditionalFormatRules();\n  sh.setHiddenGridlines(true);\n  var C = 7;\n  sh.getRange(1, 1, 1, C).merge().setValue('MentoBeam \\u2013 Simulation Exam Bookings').setBackground(NAVY).setFontColor('#ffffff')\n    .setFontSize(16).setFontWeight('bold').setVerticalAlignment('middle');\n  sh.setRowHeight(1, 46);\n  sh.getRange(2, 1, 1, C).merge().setValue('Auto-generated. Every exam date has its own tab. Cancelled bookings stay in the sheet (marked \"Cancelled\"). Clearing old data from the website never deletes anything here.')\n    .setBackground('#eef3fb').setFontColor(NAVY).setFontStyle('italic').setWrap(true).setVerticalAlignment('middle');\n  sh.setRowHeight(2, 38);\n  sh.getRange(3, 1, 1, C).setValues([['Exam Date', 'Exam', 'Registered', 'Present', 'Absent', 'Cancelled', 'Tab']])\n    .setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');\n  [170, 240, 100, 90, 90, 100, 100].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });\n\n  var tabs = dateSheets_(ss).map(function (x) { return { sh: x.sh, date: getMeta_(x.sh, 'date') || '', title: getMeta_(x.sh, 'title') || '' }; })\n    .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });\n  if (tabs.length) {\n    var rows = tabs.map(function (t) {\n      var q = \"'\" + t.sh.getName().replace(/'/g, \"''\") + \"'!\";\n      return [t.date ? dateObj_(t.date) : '', t.title,\n        '=COUNTIF(' + q + '$I$4:$I,\"Booked\")', '=COUNTIF(' + q + '$H$4:$H,\"Present\")', '=COUNTIF(' + q + '$H$4:$H,\"Absent\")',\n        '=COUNTIF(' + q + '$I$4:$I,\"Cancelled\")', '=HYPERLINK(\"#gid=' + t.sh.getSheetId() + '\",\"Open \\u2192\")'];\n    });\n    var r = sh.getRange(4, 1, rows.length, C);\n    r.setValues(rows).setVerticalAlignment('middle').setBorder(true, true, true, true, true, true, '#d5dbe6', SpreadsheetApp.BorderStyle.SOLID);\n    sh.getRange(4, 1, rows.length, 1).setNumberFormat('ddd, dd mmm yyyy');\n    sh.getRange(4, 3, rows.length, 5).setHorizontalAlignment('center');\n  }\n  sh.setFrozenRows(3);\n}\n\n/* ============================ RENTALS (added) ============================\n * Rental bookings -> one tab per space (\"Rent \u2013 Mentor Hall\", ...) in the SAME spreadsheet.\n * Current rates / availability -> tab \"Rental Rates\"; every change is logged in \"Rental Changes\".\n * Like the exam tabs: nothing is ever deleted (cancelled / deleted bookings stay, marked Cancelled).\n */\nvar RENT_HEAD = 3, RENT_FIRST = 4;\nvar RENT_HEADERS = ['No', 'Name', 'Email', 'Phone', 'Package', 'Date', 'Start', 'End', 'Hours', 'Guests', 'Layout', 'Extras', 'Estimate (Rs)', 'Status', 'Notes', 'Requested At', 'Booking Code', 'Advance (Rs)', 'Payment', 'Refund', 'Balance (Rs)', 'Received (Rs)'];\nvar RENT_NC = RENT_HEADERS.length, RC_STATUS = 14, RC_CODE = 17;\nvar RENT_NAMES = { hall: 'Mentor Hall', lab: 'Computer Lab', lounge: 'Lounge and Pantry' };\n\nfunction rentSheets_(ss) {\n  var out = [];\n  ss.createDeveloperMetadataFinder().withKey('rentSpace').find().forEach(function (m) {\n    var loc = m.getLocation();\n    if (loc.getLocationType() === SpreadsheetApp.DeveloperMetadataLocationType.SHEET) out.push({ sh: loc.getSheet(), id: m.getValue() });\n  });\n  return out;\n}\nfunction rentSheet_(ss, spaceId, spaceName) {\n  var found = null; rentSheets_(ss).forEach(function (x) { if (x.id === spaceId) found = x.sh; });\n  var title = spaceName || RENT_NAMES[spaceId] || spaceId;\n  if (!found) {\n    found = ss.insertSheet(uniqueName_(ss, 'Rent \\u2013 ' + title, null));\n    found.addDeveloperMetadata('rentSpace', spaceId);\n    formatRentTab_(found);\n  }\n  found.getRange(1, 1).setValue(title + '   \\u2014   rental bookings');\n  return found;\n}\nfunction rentLocate_(ss, ids) {\n  var hits = {};\n  rentSheets_(ss).forEach(function (x) {\n    var last = x.sh.getLastRow(); if (last < RENT_FIRST) return;\n    x.sh.getRange(RENT_FIRST, RC_CODE, last - RENT_FIRST + 1, 1).getValues().forEach(function (r, i) {\n      if (r[0] && ids.indexOf(String(r[0])) >= 0 && !hits[r[0]]) hits[r[0]] = { sh: x.sh, row: RENT_FIRST + i };\n    });\n  });\n  return hits;\n}\nfunction capFirst_(s) { s = String(s || 'pending'); return s.charAt(0).toUpperCase() + s.slice(1); }\nfunction rentRow_(id, b) {\n  var d = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(b.date)) ? dateObj_(b.date) : String(b.date || '');\n  return ['', String(b.name || ''), String(b.email || ''), String(b.phone || ''), String(b.packageName || ''), d, frac_(b.startTime), frac_(b.endTime),\n    b.hours || '', b.guests || '', String(b.layout || ''), String(b.extrasText || ''), Number(b.totalFinal != null ? b.totalFinal : b.estimate) || 0, capFirst_(b.status), String(b.notes || ''),\n    new Date(Number(b.createdAt) || Date.now()), id,\n    Number(b.advanceReceived != null ? b.advanceReceived : b.advanceDue) || 0,\n    b.closed ? 'PAID IN FULL (closed)' : (b.advanceVerified ? 'Advance verified - balance ' + (b.balanceSlipAt ? 'slip received' : 'due') : (b.slipAt ? 'Advance slip received' : (Number(b.advanceDue) > 0 ? 'Awaiting advance slip' : '-'))),\n    b.refundStatus === 'paid' ? 'Refund PAID Rs ' + (Number(b.refundPaidAmount != null ? b.refundPaidAmount : b.refundAmount) || 0) : (b.refundStatus === 'requested' ? 'Refund REQUESTED Rs ' + (Number(b.refundAmount) || 0) + ' (' + (b.refundBank || '') + ')' : (b.refundStatus === 'rejected' ? 'Refund rejected' : '')),\n    Math.max(0, (Number(b.totalFinal != null ? b.totalFinal : b.estimate) || 0) - (Number(b.advanceReceived != null ? b.advanceReceived : b.advanceDue) || 0)),\n    (b.advanceVerified ? Number(b.advanceReceived) || 0 : 0) + (b.balanceVerified ? Number(b.balanceReceived) || 0 : 0)];\n}\nfunction ensureRentCols_(sh) {   // tabs created by an older script version get the 3 new payment columns\n  if (sh.getMaxColumns() < RENT_NC) sh.insertColumnsAfter(sh.getMaxColumns(), RENT_NC - sh.getMaxColumns());\n  if (String(sh.getRange(RENT_HEAD, RENT_NC).getValue()) !== RENT_HEADERS[RENT_NC - 1]) {\n    sh.getRange(RENT_HEAD, 1, 1, RENT_NC).setValues([RENT_HEADERS]);\n    sh.getRange(RENT_HEAD, 18, 1, RENT_NC - 17).setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle');\n    [120, 190, 240, 120, 120].forEach(function (w, i) { sh.setColumnWidth(18 + i, w); });\n    var body = Math.max(sh.getMaxRows() - RENT_FIRST + 1, 1);\n    sh.getRange(RENT_FIRST, 18, body, 1).setNumberFormat('#,##0').setHorizontalAlignment('center');\n    sh.getRange(RENT_FIRST, 19, body, 2).setNumberFormat('@');\n    sh.getRange(RENT_FIRST, 21, body, 2).setNumberFormat('#,##0').setHorizontalAlignment('center');\n  }\n}\nfunction rent_(ss, p) {\n  var res = { ok: true, added: 0, updated: 0, cancelled: 0 };\n  if (ss.getSpreadsheetTimeZone() !== TIMEZONE) ss.setSpreadsheetTimeZone(TIMEZONE);\n  var ids = uniq_(p.rentIds), tok = String(p.token || ''), rec = p.records || {}, gone = uniq_(p.gone), docs;\n  try { docs = fetchDocs_('rentBookings', ids, tok); }\n  catch (e) {   // Firestore refused the read -> use what the page sent\n    docs = {}; ids.forEach(function (id) { if (gone.indexOf(id) >= 0) docs[id] = null; else if (rec[id]) docs[id] = rec[id]; });\n    var any = false; ids.forEach(function (id) { if (docs[id] !== undefined) any = true; });\n    if (ids.length && !any) throw e; res.warn = e.code;\n  }\n  var hits = rentLocate_(ss, ids), touched = {};\n  ids.forEach(function (id) {\n    var b = docs[id], hit = hits[id];\n    if (b === undefined) return;\n    if (b === null) { if (hit) { hit.sh.getRange(hit.row, RC_STATUS).setValue('Cancelled'); res.cancelled++; } return; }\n    var vals = rentRow_(id, b);\n    if (hit) { if (!touched[hit.sh.getSheetId()]) ensureRentCols_(hit.sh); hit.sh.getRange(hit.row, 1, 1, RENT_NC).setValues([vals]); touched[hit.sh.getSheetId()] = hit.sh; res.updated++; return; }\n    var sh = rentSheet_(ss, String(b.spaceId || 'other'), b.spaceName);\n    if (!touched[sh.getSheetId()]) ensureRentCols_(sh);\n    var last = Math.max(sh.getLastRow(), RENT_HEAD);\n    if (last + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 200);\n    sh.getRange(last + 1, 1, 1, RENT_NC).setValues([vals]); touched[sh.getSheetId()] = sh; res.added++;\n  });\n  Object.keys(touched).forEach(function (k) {\n    var sh = touched[k], n = sh.getLastRow() - RENT_HEAD; if (n < 1) return;\n    sh.getRange(RENT_FIRST, 1, n, RENT_NC).sort([{ column: 6, ascending: true }, { column: 7, ascending: true }, { column: 16, ascending: true }]);\n    var nums = []; for (var i = 1; i <= n; i++) nums.push([i]);\n    sh.getRange(RENT_FIRST, 1, n, 1).setValues(nums);\n  });\n  return res;\n}\nfunction rentIndex_(ss) {\n  var codes = [];\n  rentSheets_(ss).forEach(function (x) {\n    var last = x.sh.getLastRow(); if (last < RENT_FIRST) return;\n    x.sh.getRange(RENT_FIRST, RC_CODE, last - RENT_FIRST + 1, 1).getValues().forEach(function (r) { if (r[0]) codes.push(String(r[0])); });\n  });\n  return { ok: true, codes: codes, spaces: !!ss.getSheetByName('Rental Rates') };\n}\nfunction formatRentTab_(sh) {\n  var NC = RENT_NC, MAXR = 1000;\n  if (sh.getMaxColumns() > NC) sh.deleteColumns(NC + 1, sh.getMaxColumns() - NC);\n  if (sh.getMaxRows() < MAXR) sh.insertRowsAfter(sh.getMaxRows(), MAXR - sh.getMaxRows());\n  sh.setHiddenGridlines(true); sh.setFrozenRows(RENT_HEAD);\n  sh.getRange(1, 1, 1, NC).merge().setBackground(NAVY).setFontColor('#ffffff').setFontSize(15).setFontWeight('bold').setHorizontalAlignment('left').setVerticalAlignment('middle');\n  sh.setRowHeight(1, 44);\n  sh.getRange(2, 1, 1, NC).merge().setBackground('#eef3fb').setFontColor(NAVY).setFontWeight('bold').setHorizontalAlignment('left').setVerticalAlignment('middle');\n  sh.getRange(2, 1).setFormula('=\"Pending: \"&COUNTIF($N$4:$N,\"Pending\")&\"      Confirmed: \"&COUNTIF($N$4:$N,\"Confirmed\")&\"      Completed: \"&COUNTIF($N$4:$N,\"Completed\")&\"      Cancelled: \"&COUNTIF($N$4:$N,\"Cancelled\")&\"      Estimated value (confirmed + completed): Rs \"&TEXT(SUMIFS($M$4:$M,$N$4:$N,\"Confirmed\")+SUMIFS($M$4:$M,$N$4:$N,\"Completed\"),\"#,##0\")');\n  sh.setRowHeight(2, 30);\n  sh.getRange(RENT_HEAD, 1, 1, NC).setValues([RENT_HEADERS]).setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle');\n  sh.setRowHeight(RENT_HEAD, 32);\n  [50, 170, 210, 120, 150, 150, 85, 85, 65, 70, 100, 220, 120, 100, 260, 175, 230, 120, 190, 240, 120, 120].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });\n  var body = MAXR - RENT_FIRST + 1;\n  [2, 3, 4, 5, 11, 12, 14, 15, 17, 19, 20].forEach(function (c) { sh.getRange(RENT_FIRST, c, body, 1).setNumberFormat('@'); });\n  sh.getRange(RENT_FIRST, 18, body, 1).setNumberFormat('#,##0').setHorizontalAlignment('center');\n  sh.getRange(RENT_FIRST, 21, body, 2).setNumberFormat('#,##0').setHorizontalAlignment('center');\n  sh.getRange(RENT_FIRST, 6, body, 1).setNumberFormat('ddd, dd mmm yyyy');\n  sh.getRange(RENT_FIRST, 7, body, 2).setNumberFormat('h:mm AM/PM');\n  sh.getRange(RENT_FIRST, 13, body, 1).setNumberFormat('#,##0');\n  sh.getRange(RENT_FIRST, 16, body, 1).setNumberFormat('dd mmm yyyy, h:mm AM/PM');\n  [1, 6, 7, 8, 9, 10, 14].forEach(function (c) { sh.getRange(RENT_FIRST, c, body, 1).setHorizontalAlignment('center'); });\n  sh.getRange(RENT_HEAD, 1, body + 1, NC).setBorder(true, true, true, true, true, true, '#d5dbe6', SpreadsheetApp.BorderStyle.SOLID).setVerticalAlignment('middle');\n  var all = sh.getRange(RENT_FIRST, 1, body, NC), st = sh.getRange(RENT_FIRST, RC_STATUS, body, 1), R = function () { return SpreadsheetApp.newConditionalFormatRule(); };\n  sh.setConditionalFormatRules([\n    R().whenFormulaSatisfied('=$N4=\"Cancelled\"').setFontColor('#9aa6b8').setStrikethrough(true).setBackground('#f1f2f5').setRanges([all]).build(),\n    R().whenTextEqualTo('Confirmed').setBackground('#d9f5e4').setFontColor('#0e7a3d').setRanges([st]).build(),\n    R().whenTextEqualTo('Pending').setBackground('#fff1d6').setFontColor('#a86f00').setRanges([st]).build(),\n    R().whenTextEqualTo('Completed').setBackground('#e6ebf5').setFontColor(BLUE).setRanges([st]).build(),\n    R().whenFormulaSatisfied('=AND($B4<>\"\",ISEVEN(ROW()))').setBackground('#f6f8fd').setRanges([all]).build()\n  ]);\n}\n// current rates + availability (rebuilt each time) and a change log (appended)\nfunction rentSpaces_(ss, p) {\n  var ids = uniq_(p.ids), docs = fetchDocs_('spaces', ids, String(p.token || ''));\n  var sh = ss.getSheetByName('Rental Rates') || ss.insertSheet('Rental Rates');\n  sh.clear(); sh.setHiddenGridlines(true);\n  sh.getRange(1, 1, 1, 6).merge().setValue('MentoBeam \\u2013 Rental spaces, rates & availability (current)').setBackground(NAVY).setFontColor('#ffffff').setFontSize(15).setFontWeight('bold').setVerticalAlignment('middle');\n  sh.setRowHeight(1, 44);\n  sh.getRange(2, 1, 1, 6).merge().setValue('Updated ' + Utilities.formatDate(new Date(), TIMEZONE, 'dd MMM yyyy, h:mm a') + '. Auto-generated from the website; edit rates in Admin \\u2192 Rentals.').setBackground('#eef3fb').setFontColor(NAVY).setFontStyle('italic');\n  sh.getRange(3, 1, 1, 6).setValues([['Space', 'Booking', 'Type', 'Name', 'Price', 'Unit / note']]).setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold');\n  var rows = [], money = function (n) { return 'Rs ' + Number(n || 0).toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ','); };\n  ids.forEach(function (id) {\n    var d = docs[id]; if (!d) return;\n    var av = d.available === false ? 'DISABLED' : 'Available';\n    (d.packages || []).forEach(function (x) { rows.push([d.name || id, av, 'Package', x.name || '', x.mode === 'quote' ? (x.priceText || 'On request') : money(x.price), [x.unit, x.note].filter(String).join(' \\u00b7 ')]); });\n    (d.extras || []).forEach(function (x) { rows.push([d.name || id, av, 'Extra', x.name || '', x.per === 'request' ? (x.label || 'On request') : money(x.price), x.label || '']); });\n  });\n  if (rows.length) sh.getRange(4, 1, rows.length, 6).setValues(rows).setNumberFormat('@').setBorder(true, true, true, true, true, true, '#d5dbe6', SpreadsheetApp.BorderStyle.SOLID);\n  [170, 100, 90, 280, 130, 330].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });\n  if (rows.length) sh.getRange(4, 2, rows.length, 1).setFontWeight('bold');\n  if (p.note) {\n    var lg = ss.getSheetByName('Rental Changes');\n    if (!lg) { lg = ss.insertSheet('Rental Changes'); lg.getRange(1, 1, 1, 3).setValues([['When', 'Change', 'By']]).setBackground(BLUE).setFontColor('#ffffff').setFontWeight('bold'); lg.setColumnWidth(1, 180); lg.setColumnWidth(2, 460); lg.setColumnWidth(3, 200); lg.setFrozenRows(1); }\n    lg.appendRow([Utilities.formatDate(new Date(), TIMEZONE, 'dd MMM yyyy, h:mm a'), String(p.note).slice(0, 300), String(p.by || '').slice(0, 80)]);\n  }\n  return { ok: true, rows: rows.length };\n}\n";
+const gasCode = () => GAS_CODE.split('__PROJECT_ID__').join(firebaseConfig.projectId).split('__API_KEY__').join(firebaseConfig.apiKey);
+const SHEET_URL_RE = /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+\/|macros\/)s\/[\w-]+\/exec$/;
+let sheetCfg = { url: '', on: false }, sheetHealed = false;
+const SHEET_HINTS = {
+  403: 'Firestore rules do not let the script read this data. Copy the latest script from this page into Apps Script, then Deploy → Manage deployments → Edit → New version, and press "Sync all data now". If it still shows 403, allow admins to read this collection in your Firestore rules.',
+  400: 'The Firebase project id in the script looks wrong. Copy the latest script from this page and deploy a new version.',
+  401: 'Your admin login expired. Log out, log in again and retry.',
+  429: 'Too many requests. Wait a minute and retry.'
+};
+// admin-only: turns a script / network error into a short code + fix hint (students never see these)
+function sheetFail(r) { const e = new Error((r && r.error) || 'Script error'); e.code = (r && r.code) || 'E_SCRIPT'; e.detail = (r && r.detail) || ''; return e; }
+function sheetShowErr(e) {
+  const code = e.code || (/abort|failed to fetch|network/i.test(String(e.message)) ? 'E_NETWORK' : 'E_SYNC');
+  const st = (code.match(/_(\d{3})$/) || [])[1];
+  const hint = SHEET_HINTS[st] || (code === 'E_NETWORK' ? 'Could not reach the script. Check the internet and that it is deployed as a Web app with "Who has access: Anyone".' : 'Open the Apps Script project → Executions to see the details.');
+  const box = $('#shMsg');
+  if (box) box.innerHTML = '<b style="color:var(--red)">Error code: ' + esc(code) + '</b><br>' + esc(hint) + (e.detail ? '<br><code style="font-size:12px;word-break:break-word">' + esc(e.detail) + '</code>' : '');
+  toast('Google Sheet sync failed [' + code + ']', 'err');
+}
+async function sheetTok() { try { return await user.getIdToken(); } catch (e) { return ''; } }
+const _sq = { b: new Set(), d: new Set(), g: new Set(), t: 0 };
+let sheetLastWarn = '';
+
+async function loadSheetCfg() {
+  try {
+    const s = await db.collection('settings').doc('site').get(); const d = s.exists ? s.data() : {};
+    sheetCfg = { url: d.sheetUrl || '', on: !!(d.sheetOn && d.sheetUrl) };
+  } catch (e) { /* keep old value */ }
+}
+// page data sent along with the IDs – the script uses it only if Firestore refuses its own read
+function sheetRecs(bIds, dIds, goneIds) {
+  const bm = new Map(bookings.map(b => [b.id, b])), dm = new Map(dates.map(d => [d.id, d]));
+  const gone = new Set(goneIds || []), rec = { bookings: {}, dates: {} }, dd = new Set(dIds);
+  bIds.forEach(id => {
+    const b = bm.get(id);
+    if (!b) { gone.add(id); return; }
+    if (gone.has(id)) return;
+    rec.bookings[id] = { name: b.name, email: b.email, phone: b.phone, dateId: b.dateId, date: b.date, time: b.time, endTime: b.endTime || null, createdAt: b.createdAt, attended: b.attended === undefined ? null : b.attended, examTitle: b.examTitle || '' };
+    if (b.dateId) dd.add(b.dateId);
+  });
+  dd.forEach(id => { const d = dm.get(id); if (d) rec.dates[id] = { date: d.date, title: d.title || '' }; });
+  return { records: rec, gone: [...gone] };
+}
+// called after admin changes (debounced) – the script re-reads these records from Firestore
+function sheetQueue(o) {
+  if (!sheetCfg.on || !sheetCfg.url) return;
+  (o.bookings || []).forEach(x => _sq.b.add(x)); (o.dates || []).forEach(x => _sq.d.add(x)); (o.gone || []).forEach(x => _sq.g.add(x));
+  clearTimeout(_sq.t); _sq.t = setTimeout(() => {
+    const b = [..._sq.b], d = [..._sq.d], g = [..._sq.g]; _sq.b.clear(); _sq.d.clear(); _sq.g.clear();
+    if (b.length || d.length) sheetTok().then(token => sheetSend(sheetCfg.url, { action: 'sync', bookingIds: b, dateIds: d, token, ...sheetRecs(b, d, g) }));
+  }, 1500);
+}
+async function sheetSyncAll(onMsg, only) {
+  const dIds = only ? only.dates : dates.map(d => d.id), bIds = only ? only.bookings : bookings.map(b => b.id);
+  const total = dIds.length + bIds.length; let done = 0;
+  const step = async (key, ids) => {
+    for (let i = 0; i < ids.length; i += 40) {
+      const chunk = ids.slice(i, i + 40);
+      const r = await sheetCall(sheetCfg.url, { action: 'sync', [key]: chunk, token: await sheetTok(), ...sheetRecs(key === 'bookingIds' ? chunk : [], key === 'dateIds' ? chunk : [], []) });
+      if (!r || !r.ok) throw sheetFail(r);
+      if (r.warn) sheetLastWarn = r.warn;
+      done += chunk.length; if (onMsg) onMsg('Syncing… ' + done + ' / ' + total);
+    }
+  };
+  await step('dateIds', dIds); await step('bookingIds', bIds);
+  return total;
+}
+// once per login: add anything that is in the database but missing in the sheet (e.g. a student booked while the network failed)
+async function sheetHeal() {
+  if (sheetHealed || !sheetCfg.on) return;
+  sheetHealed = true;
+  try {
+    const r = await sheetCall(sheetCfg.url, { action: 'index' });
+    if (!r || !r.ok) return;   // silent: errors are only shown on the Google Sheet page
+    const have = new Set(r.codes), haveD = new Set(r.dateIds);
+    const mb = bookings.filter(b => !have.has(b.id)).map(b => b.id), md = dates.filter(d => !haveD.has(d.id)).map(d => d.id);
+    if (!mb.length && !md.length) return;
+    await sheetSyncAll(null, { dates: md, bookings: mb });
+    if (mb.length) toast('Google Sheet updated – ' + mb.length + ' missing registration' + (mb.length === 1 ? '' : 's') + ' added', 'ok');
+  } catch (e) { /* silent */ }
+}
+views.sheet = {
+  async render() {
+    view.innerHTML = '<div class="empty"><div class="spin dark"></div></div>';
+    await loadSheetCfg();
+    if (current !== 'sheet') return;
+    this.paint();
+  },
+  paint(msgHtml) {
+    const c = sheetCfg;
+    view.innerHTML = `<div class="card box"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><h3 style="margin:0">Google Sheet auto-save</h3>
+        ${c.url ? (c.on ? '<span class="badge b-ok">Connected · auto-sync ON</span>' : '<span class="badge b-warn">Connected · paused</span>') : '<span class="badge b-gray">Not connected</span>'}</div>
+      <p class="muted" style="font-size:13.5px">Every exam date you create gets its own tab in your Google Sheet (formatted automatically). Student name, email, phone, exam date and exam time are saved in order, and attendance changes are updated too. Deleting or clearing old data from this website <b>never</b> removes anything from the sheet.</p></div>
+      <div class="card box"><h3>Connect your sheet <span class="muted" style="font-size:13px;font-weight:600">(one time)</span></h3>
+        <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14px;margin-bottom:14px">
+          <li>Create a <b>blank</b> Google Sheet.</li>
+          <li>In that sheet open <b>Extensions → Apps Script</b>, delete everything, paste the code below and press Save.</li>
+          <li><b>Deploy → New deployment → Web app</b> · Execute as: <b>Me</b> · Who has access: <b>Anyone</b> → Deploy and allow access.</li>
+          <li>Copy the <b>Web app URL</b> (ends with <code>/exec</code>) and paste it below, then press <b>Save &amp; Connect</b>.</li></ol>
+        <div class="field"><label>Apps Script code</label><textarea id="shCode" readonly style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:12px">${esc(gasCode())}</textarea></div>
+        <button class="btn btn-ghost" data-act="sheetCopy">📋 Copy code</button>
+        <div class="field" style="margin-top:16px"><label>Web app URL</label><input id="shUrl" value="${esc(c.url)}" placeholder="https://script.google.com/macros/s/.../exec"/></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" data-act="sheetConnect">🔗 Save &amp; Connect</button>
+          ${c.url ? `<button class="btn btn-blue" data-act="sheetSync">↻ Sync all data now</button>
+          <button class="btn btn-ghost" data-act="sheetTest">Test connection</button>
+          <button class="btn btn-ghost" data-act="sheetToggle">${c.on ? '⏸ Pause auto-sync' : '▶ Resume auto-sync'}</button>` : ''}</div>
+        <p class="help" id="shMsg" style="margin-top:12px">${msgHtml || ''}</p>
+        <p class="help" style="margin-top:8px">After you edit the script code later, use Deploy → Manage deployments → Edit → New version.</p></div>`;
+  }
+};
+
+/* ====================== ACTIONS ====================== */
+const A = {
+  openSide() { $('#side').classList.add('open'); $('#shade').classList.add('open'); },
+  closeSide() { $('#side').classList.remove('open'); $('#shade').classList.remove('open'); },
+  logout() { logout(); },
+  pwd() {
+    const m = modal(`<h2 class="mh">Change password</h2><p class="msub">Enter your current password and a new one.</p>
+      <div class="field"><label>Current password</label><input id="cpOld" type="password" autocomplete="current-password"/></div>
+      <div class="field"><label>New password</label><input id="cpNew" type="password" autocomplete="new-password"/></div>
+      <div class="err" id="cpErr"></div><button class="btn btn-blue btn-block" id="cpBtn">Update password</button>`);
+    m.$('#cpBtn').onclick = async () => {
+      const o = m.$('#cpOld').value, n = m.$('#cpNew').value;
+      if (n.length < 6) { m.$('#cpErr').textContent = 'New password must be at least 6 characters.'; return; }
+      try {
+        await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, o));
+        await user.updatePassword(n); m.close(); toast('Password updated', 'ok');
+      } catch (e) { m.$('#cpErr').textContent = authErr(e); }
+    };
+  },
+  dashTab(d) { dashTab = d.t; views.dashboard.refresh(); },
+  dateOpen(d) { openPanel(body => renderDateDetail(body, d.id)); },
+  manageDate(d) { $$('.ov').forEach(o => o.remove()); document.body.style.overflow = ''; activePanel = null; const [y, mo] = d.date.split('-').map(Number); calY = y; calM = mo - 1; location.hash = '#/calendar'; if (current === 'calendar') views.calendar.refresh(); setTimeout(() => openDay(d.date), 50); },
+
+  /* calendar */
+  calPrev() { calM--; if (calM < 0) { calM = 11; calY--; } views.calendar.refresh(); },
+  calNext() { calM++; if (calM > 11) { calM = 0; calY++; } views.calendar.refresh(); },
+  calToday() { const n = new Date(); calY = n.getFullYear(); calM = n.getMonth(); views.calendar.refresh(); },
+  day(d) { openDay(d.date); },
+  createDate(d, el) {
+    return run(el, async () => {
+      if (dates.some(x => x.date === d.date)) throw new Error('An exam already exists on this date.');
+      const nref = await db.collection('examDates').add({ date: d.date, title: $('#dyTitle').value.trim() || 'PTE Simulation Exam', notes: $('#dyNotes').value.trim(), closed: false, createdAt: Date.now() });
+      sheetQueue({ dates: [nref.id] });
+      toast('Exam date created – now add time slots', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  saveDate(d, el) {
+    return run(el, async () => {
+      const cur = dates.find(x => x.id === d.id); const nd = $('#dyDate').value;
+      if (!nd) throw new Error('Pick a date.');
+      const upd = { title: $('#dyTitle').value.trim() || 'PTE Simulation Exam', notes: $('#dyNotes').value.trim() };
+      const ops = [];
+      if (nd !== cur.date) {
+        if (dates.some(x => x.date === nd)) throw new Error('Another exam already exists on that date.');
+        upd.date = nd;
+        slotsOf(cur.id).forEach(s => ops.push({ t: 'upd', ref: db.collection('slots').doc(s.id), data: { date: nd } }));
+        regsOfDate(cur.id).forEach(b => ops.push({ t: 'upd', ref: db.collection('bookings').doc(b.id), data: { date: nd } }));
+      }
+      ops.push({ t: 'upd', ref: db.collection('examDates').doc(cur.id), data: upd });
+      if (upd.title) regsOfDate(cur.id).forEach(b => ops.push({ t: 'upd', ref: db.collection('bookings').doc(b.id), data: { examTitle: upd.title } }));
+      await commitOps(ops);
+      sheetQueue({ dates: [cur.id], bookings: regsOfDate(cur.id).map(b => b.id) });
+      toast('Saved', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  toggleClose(d, el) {
+    return run(el, async () => {
+      const cur = dates.find(x => x.id === d.id);
+      await db.collection('examDates').doc(cur.id).update({ closed: !cur.closed });
+      toast(cur.closed ? 'Registration re-opened' : 'Registration closed', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  toggleRepeat(d, el) {
+    return run(el, async () => {
+      const cur = dates.find(x => x.id === d.id);
+      if (!cur.repeatWeekly) {
+        if (!slotsOf(cur.id).length) throw new Error('Add at least one time slot first – the weekly repeat copies these slots.');
+        const sid = cur.seriesId || cur.id;
+        await db.collection('examDates').doc(cur.id).update({ repeatWeekly: true, seriesId: sid });
+        cur.repeatWeekly = true; cur.seriesId = sid;                                 // use it right away, the live update arrives a moment later
+        const n = await repeatTopUp(false);
+        toast(n ? 'Repeat is ON – ' + n + ' weekly exam date' + (n > 1 ? 's' : '') + ' created' : 'Repeat is ON', 'ok');
+      } else {
+        const sid = cur.seriesId || cur.id;
+        await commitOps(dates.filter(x => (x.seriesId || x.id) === sid && x.repeatWeekly === true).map(x => ({ t: 'upd', ref: db.collection('examDates').doc(x.id), data: { repeatWeekly: false } })));
+        toast('Repeat is OFF – no more weekly dates will be created. Dates already created stay (delete any you do not need).', 'ok');
+      }
+      setTimeout(rerenderPanel, 150);
+    });
+  },
+  async delDate(d, el) {
+    const cur = dates.find(x => x.id === d.id), n = regsOfDate(cur.id).length;
+    if (!await confirmBox(`Delete <b>${fmtDate(cur.date)}</b> with all its time slots${n ? ` and <b>${n} student registration${n > 1 ? 's' : ''}</b>` : ''}? This cannot be undone.`, { okText: 'Delete', danger: true })) return;
+    return run(el, async () => {
+      const ops = [...regsOfDate(cur.id).map(b => ({ t: 'del', ref: db.collection('bookings').doc(b.id) })),
+        ...slotsOf(cur.id).map(s => ({ t: 'del', ref: db.collection('slots').doc(s.id) })), { t: 'del', ref: db.collection('examDates').doc(cur.id) }];
+      await commitOps(ops);
+      if (activePanel) activePanel.m.close();
+      toast('Exam date deleted', 'ok'); computeStorage();
+    });
+  },
+  addSlot(d, el) {
+    return run(el, async () => {
+      const dt = dates.find(x => x.id === d.id);
+      const time = $('#sTime').value, end = $('#sEnd').value, capV = $('#sCap').value.trim();
+      if (!time) throw new Error('Enter a start time.');
+      if (end && end <= time) throw new Error('End time must be after start time.');
+      let cap = null; if (capV !== '') { cap = parseInt(capV, 10); if (isNaN(cap) || cap < 1) throw new Error('Seat limit must be 1 or more.'); }
+      if (slotsOf(dt.id).some(s => s.time === time)) throw new Error('A slot with this start time already exists.');
+      await db.collection('slots').add({ dateId: dt.id, date: dt.date, time, endTime: end || null, capacity: cap, booked: 0, createdAt: Date.now() });
+      toast('Slot added', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  editSlot(d) {
+    const s = slots.find(x => x.id === d.id); if (!s) return;
+    const m = modal(`<h2 class="mh">Edit time slot</h2><p class="msub">${fmtDate(s.date)} · ${regsOfSlot(s.id).length} registered</p>
+      <div class="row2"><div class="field"><label>Start time</label><input id="esTime" type="time" value="${s.time}"/></div><div class="field"><label>End time</label><input id="esEnd" type="time" value="${s.endTime || ''}"/></div></div>
+      <div class="field"><label>Seat limit (empty = no limit)</label><input id="esCap" type="number" min="1" value="${s.capacity == null ? '' : s.capacity}"/></div>
+      <div class="err" id="esErr"></div><button class="btn btn-blue btn-block" id="esBtn">Save slot</button>`);
+    m.$('#esBtn').onclick = () => run(m.$('#esBtn'), async () => {
+      const time = m.$('#esTime').value, end = m.$('#esEnd').value, capV = m.$('#esCap').value.trim();
+      if (!time) { m.$('#esErr').textContent = 'Enter a start time.'; return; }
+      if (end && end <= time) { m.$('#esErr').textContent = 'End time must be after start time.'; return; }
+      let cap = null; if (capV !== '') { cap = parseInt(capV, 10); if (isNaN(cap) || cap < 1) { m.$('#esErr').textContent = 'Invalid seat limit.'; return; } }
+      const booked = regsOfSlot(s.id).length;
+      if (cap != null && cap < booked) { m.$('#esErr').textContent = `Seat limit cannot be less than the ${booked} already registered.`; return; }
+      if (slotsOf(s.dateId).some(x => x.id !== s.id && x.time === time)) { m.$('#esErr').textContent = 'Another slot has this start time.'; return; }
+      const ops = [{ t: 'upd', ref: db.collection('slots').doc(s.id), data: { time, endTime: end || null, capacity: cap } }];
+      regsOfSlot(s.id).forEach(b => ops.push({ t: 'upd', ref: db.collection('bookings').doc(b.id), data: { time, endTime: end || null } }));
+      await commitOps(ops); sheetQueue({ bookings: regsOfSlot(s.id).map(b => b.id) }); m.close(); toast('Slot updated', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  async delSlot(d, el) {
+    const s = slots.find(x => x.id === d.id), n = regsOfSlot(d.id).length;
+    if (!await confirmBox(`Delete the <b>${slotLabel(s)}</b> slot${n ? ` and its <b>${n} registration${n > 1 ? 's' : ''}</b>` : ''}?`, { okText: 'Delete', danger: true })) return;
+    return run(el, async () => {
+      const gone = regsOfSlot(s.id).map(b => b.id);
+      await commitOps([...regsOfSlot(s.id).map(b => ({ t: 'del', ref: db.collection('bookings').doc(b.id) })), { t: 'del', ref: db.collection('slots').doc(s.id) }]);
+      sheetQueue({ bookings: gone, gone });
+      toast('Slot deleted', 'ok'); setTimeout(rerenderPanel, 150); computeStorage();
+    });
+  },
+
+  /* registrations */
+  regMore() { regF.limit += 100; views.registrations.refresh(); },
+  regCsv() {
+    const list = regFiltered();
+    const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const csv = ['Name,Email,Phone,Exam date,Start time,End time,Attendance,Registered at'].concat(list.map(b =>
+      [b.name, b.email, "'" + b.phone, b.date, b.time, b.endTime || '', b.attended === true ? 'Present' : b.attended === false ? 'Absent' : 'Not marked', new Date(b.createdAt || 0).toLocaleString('en-GB')].map(q).join(','))).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = 'registrations.csv'; a.click();
+  },
+  regEdit(d) {
+    const b = bookings.find(x => x.id === d.id); if (!b) return;
+    const now = Date.now();
+    const opts = dates.slice().sort((x, y) => x.date.localeCompare(y.date)).map(dt => slotsOf(dt.id).map(s => {
+      const si = seatInfo(s), isCur = s.id === b.slotId;
+      const dis = !isCur && (si.full || now >= slotStart(s));
+      return `<option value="${s.id}" ${isCur ? 'selected' : ''} ${dis ? 'disabled' : ''}>${fmtDate(dt.date, true)} · ${slotLabel(s)} ${si.unlimited ? '' : '(' + si.text + ')'}</option>`;
+    }).join('')).join('');
+    const m = modal(`<h2 class="mh">Edit registration</h2><p class="msub">Booking code: <code style="font-size:11px">${b.id}</code></p>
+      <div class="field"><label>Name</label><input id="reName" value="${esc(b.name)}"/></div>
+      <div class="row2"><div class="field"><label>Email</label><input id="reEmail" value="${esc(b.email)}"/></div><div class="field"><label>Phone</label><input id="rePhone" value="${esc(b.phone)}"/></div></div>
+      <div class="field"><label>Exam slot</label><select id="reSlot">${opts}</select></div>
+      <div class="err" id="reErr"></div><button class="btn btn-blue btn-block" id="reBtn">Save changes</button>`);
+    m.$('#reBtn').onclick = () => run(m.$('#reBtn'), async () => {
+      const name = m.$('#reName').value.trim(), email = m.$('#reEmail').value.trim(), phone = m.$('#rePhone').value.trim(), ns = m.$('#reSlot').value;
+      if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || phone.length < 7) { m.$('#reErr').textContent = 'Please enter a valid name, email and phone.'; return; }
+      if (ns === b.slotId) { await db.collection('bookings').doc(b.id).update({ name, email, phone }); }
+      else {
+        const nsl = slots.find(x => x.id === ns), ndt = dates.find(x => x.id === nsl.dateId);
+        await db.runTransaction(async tx => {
+          const oRef = db.collection('slots').doc(b.slotId), nRef = db.collection('slots').doc(ns);
+          const o = await tx.get(oRef), n = await tx.get(nRef);
+          if (!n.exists) throw new Error('Target slot no longer exists.');
+          const nd = n.data();
+          if (nd.capacity != null && (nd.booked || 0) >= nd.capacity) throw new Error('Target slot is full.');
+          if (o.exists) tx.update(oRef, { booked: Math.max(0, (o.data().booked || 0) - 1) });
+          tx.update(nRef, { booked: (nd.booked || 0) + 1 });
+          tx.update(db.collection('bookings').doc(b.id), { name, email, phone, slotId: ns, dateId: nsl.dateId, date: nsl.date, time: nsl.time, endTime: nsl.endTime || null, examTitle: (ndt && ndt.title) || 'PTE Simulation Exam' });
+        });
+      }
+      sheetQueue({ bookings: [b.id] });
+      m.close(); toast('Registration updated', 'ok');
+    });
+  },
+  async regDel(d, el) {
+    const b = bookings.find(x => x.id === d.id); if (!b) return;
+    if (!await confirmBox(`Delete the registration of <b>${esc(b.name)}</b> (${fmtDate(b.date, true)}, ${slotLabel(b)})? The seat will be freed.`, { okText: 'Delete', danger: true })) return;
+    return run(el, async () => {
+      await db.runTransaction(async tx => {
+        const sRef = db.collection('slots').doc(b.slotId); const s = await tx.get(sRef);
+        if (s.exists) tx.update(sRef, { booked: Math.max(0, (s.data().booked || 0) - 1) });
+        tx.delete(db.collection('bookings').doc(b.id));
+      });
+      sheetQueue({ bookings: [b.id], gone: [b.id] });
+      toast('Registration deleted', 'ok'); computeStorage();
+    });
+  },
+
+  /* attendance */
+  att(d) {
+    const b = bookings.find(x => x.id === d.id); if (!b) return;
+    const want = d.val === 'p' ? true : false;
+    const nv = b.attended === want ? null : want;
+    db.collection('bookings').doc(b.id).update({ attended: nv }).then(() => sheetQueue({ bookings: [b.id] })).catch(e => toast(errMsg(e), 'err'));
+  },
+  attAll(d, el) {
+    return run(el, async () => {
+      const v = d.val === '1' ? true : null;
+      await commitOps(regsOfSlot(d.slot).map(b => ({ t: 'upd', ref: db.collection('bookings').doc(b.id), data: { attended: v } })));
+      sheetQueue({ bookings: regsOfSlot(d.slot).map(b => b.id) });
+      toast(v ? 'All marked present' : 'Cleared', 'ok');
+    });
+  },
+
+  /* reports */
+  repPdf() { if (!repMonth) { toast('Select a month', 'err'); return; } downloadReportPDF(repMonth); },
+
+  /* google sheet */
+  async sheetCopy() {
+    const t = $('#shCode');
+    try { await navigator.clipboard.writeText(t.value); } catch (e) { t.select(); document.execCommand('copy'); }
+    toast('Code copied', 'ok');
+  },
+  sheetConnect(d, el) {
+    return run(el, async () => {
+      const url = $('#shUrl').value.trim(), msg = $('#shMsg');
+      if (!SHEET_URL_RE.test(url)) throw new Error('Paste the Web app URL that ends with /exec');
+      msg.textContent = 'Connecting…';
+      let r;
+      try { r = await sheetCall(url, { action: 'setup' }, 60000); }
+      catch (e) { e.code = 'E_NETWORK'; return sheetShowErr(e); }
+      if (!r || !r.ok) return sheetShowErr(sheetFail(r));
+      await db.collection('settings').doc('site').set({ sheetUrl: url, sheetOn: true, sheetUpdatedAt: Date.now() }, { merge: true });
+      sheetCfg = { url, on: true }; sheetHealed = true;
+      try { await sheetSyncAll(t => { msg.textContent = t; }); }
+      catch (e) { views.sheet.paint(''); return sheetShowErr(e); }
+      views.sheet.paint('✓ Connected to <b>' + esc(r.name) + '</b> – <a href="' + esc(r.url) + '" target="_blank" rel="noopener">open the sheet</a>. New bookings now save automatically.');
+      toast('Google Sheet connected', 'ok');
+    });
+  },
+  sheetTest(d, el) {
+    return run(el, async () => {
+      let r; try { r = await sheetCall(sheetCfg.url, { action: 'ping' }, 30000); } catch (e) { e.code = 'E_NETWORK'; return sheetShowErr(e); }
+      if (!r || !r.ok) return sheetShowErr(sheetFail(r));
+      $('#shMsg').innerHTML = '✓ Working – sheet “' + esc(r.name) + '” · <a href="' + esc(r.url) + '" target="_blank" rel="noopener">open the sheet</a>';
+    });
+  },
+  sheetSync(d, el) {
+    return run(el, async () => {
+      const msg = $('#shMsg');
+      try {
+        sheetLastWarn = '';
+        const n = await sheetSyncAll(t => { msg.textContent = t; });
+        msg.textContent = '✓ Done – ' + n + ' record' + (n === 1 ? '' : 's') + ' checked / updated.' + (sheetLastWarn ? ' (Firestore blocked the script’s direct read [' + sheetLastWarn + '], so the data was sent from this page instead – it is saved correctly.)' : '');
+      } catch (e) { sheetShowErr(e); }
+    });
+  },
+  sheetToggle(d, el) {
+    return run(el, async () => {
+      const on = !sheetCfg.on;
+      await db.collection('settings').doc('site').set({ sheetOn: on, sheetUpdatedAt: Date.now() }, { merge: true });
+      sheetCfg.on = on; views.sheet.paint(on ? 'Auto-sync resumed. Press "Sync all data now" to add anything saved while it was paused.' : 'Auto-sync paused. Nothing is removed from the sheet.');
+    });
+  },
+
+  /* content */
+  contentSave(d, el) {
+    return run(el, async () => {
+      const data = { heroTitle: $('#ctHero').value.trim(), welcomeMsg: $('#ctWelcome').value.trim(), announcement: $('#ctAnn').value.trim(), description: $('#ctDesc').value.trim(), rules: $('#ctRules').value.trim(), contact: $('#ctContact').value.trim(), updatedAt: Date.now() };
+      await db.collection('settings').doc('site').set(data, { merge: true }); siteData = { ...siteData, ...data };
+      toast('Website content saved', 'ok'); computeStorage();
+    });
+  },
+  photoPick() { $('#photoIn').click(); },
+  async photoDel(d, el) {
+    if (!await confirmBox('Delete this photo?', { okText: 'Delete', danger: true })) return;
+    return run(el, async () => { await db.collection('gallery').doc(d.id).delete(); galDocs = galDocs.filter(g => g.id !== d.id); views.content.paint(); toast('Photo deleted', 'ok'); computeStorage(); });
+  },
+
+  /* storage */
+  stCalc(d, el) { return run(el, async () => { await computeStorage(); toast('Recalculated', 'ok'); }); },
+  stLimit() { const v = Number($('#stLimit').value); if (!v || v < 50) { toast('Enter a valid size in MB', 'err'); return; } localStorage.setItem('mb_limit_mb', v); computeStorage(); },
+  stDelete() {
+    const tg = cleanupTargets();
+    const m = modal(`<h2 class="mh">Delete ${stEarlier ? 'data up to ' : 'data of '}${monthLabel(stMonth)}</h2>
+      <p class="msub">This will permanently delete <b>${tg.ds.length}</b> exam date(s), <b>${tg.sl.length}</b> slot(s) and <b>${tg.bk.length}</b> registration(s) and <b>${tg.rb.length}</b> rental booking(s). Admin accounts and website settings stay.</p>
+      ${can('reports') && !stEarlier ? '<button class="btn btn-ghost btn-sm" id="dlRep" style="margin-bottom:14px">⬇ Download this month\'s PDF report first</button>' : ''}
+      <div class="field"><label>Enter your admin password to confirm</label><input id="delPw" type="password" autocomplete="current-password"/></div>
+      <div class="err" id="delErr"></div>
+      <button class="btn btn-primary btn-block" id="delGo">🗑 Delete permanently</button>`);
+    const dl = m.$('#dlRep'); if (dl) dl.onclick = () => downloadReportPDF(stMonth);
+    m.$('#delGo').onclick = async () => {
+      const pw = m.$('#delPw').value; if (!pw) { m.$('#delErr').textContent = 'Password required.'; return; }
+      const b = m.$('#delGo'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Deleting...';
+      try {
+        await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, pw));
+        const t2 = cleanupTargets();
+        await commitOps([...t2.bk.map(x => ({ t: 'del', ref: db.collection('bookings').doc(x.id) })), ...t2.rb.map(x => ({ t: 'del', ref: db.collection('rentBookings').doc(x.id) })), ...t2.rb.map(x => ({ t: 'del', ref: db.collection('rentSlips').doc(x.id) })), ...t2.rb.map(x => ({ t: 'del', ref: db.collection('rentSlips').doc(x.id + '_bal') })), ...t2.sl.map(x => ({ t: 'del', ref: db.collection('slots').doc(x.id) })), ...t2.ds.map(x => ({ t: 'del', ref: db.collection('examDates').doc(x.id) }))]);
+        m.close(); toast('Old data deleted – storage freed', 'ok'); setTimeout(computeStorage, 800);
+      } catch (e) { m.$('#delErr').textContent = authErr(e); b.disabled = false; b.textContent = '🗑 Delete permanently'; }
+    };
+  },
+
+  /* admins */
+  adminAdd() {
+    const m = modal(`<h2 class="mh">Add admin</h2><p class="msub">Create a login and choose what this person can access.</p>
+      <div class="field"><label>Name</label><input id="aaName"/></div>
+      <div class="row2"><div class="field"><label>Email</label><input id="aaEmail" type="email"/></div><div class="field"><label>Password (min 6)</label><input id="aaPw" type="text" autocomplete="off"/></div></div>
+      <div class="field"><label>Role</label><select id="aaRole"><option value="admin">Admin (choose permissions)</option><option value="super">Super admin (full access incl. admins)</option></select></div>
+      <div id="aaPerms"><label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Permissions</label>${permBoxes({ dates: true, bookings: true, attendance: true })}</div>
+      <div class="err" id="aaErr"></div><button class="btn btn-primary btn-block" id="aaBtn">Create admin</button>`);
+    m.$('#aaRole').onchange = e => { m.$('#aaPerms').hidden = e.target.value === 'super'; };
+    m.$('#aaBtn').onclick = () => run(m.$('#aaBtn'), async () => {
+      const name = m.$('#aaName').value.trim(), email = m.$('#aaEmail').value.trim(), pw = m.$('#aaPw').value, role = m.$('#aaRole').value;
+      if (!name || !email || pw.length < 6) { m.$('#aaErr').textContent = 'Fill name, email and a password of 6+ characters.'; return; }
+      try {
+        const uid = await createAuthUser(email, pw);
+        await db.collection('admins').doc(uid).set({ name, email, role, founder: false, perms: role === 'super' ? ALLPERMS : readPerms(m.el), createdAt: Date.now(), createdBy: me.id });
+        m.close(); toast('Admin created', 'ok'); views.admins.load();
+      } catch (e) { m.$('#aaErr').textContent = authErr(e); }
+    });
+  },
+  adminEdit(d) {
+    const a = adminList.find(x => x.id === d.id); if (!a) return;
+    const lock = a.founder || a.id === me.id;
+    const m = modal(`<h2 class="mh">Edit admin</h2><p class="msub">${esc(a.email || '')}</p>
+      <div class="field"><label>Name</label><input id="aeName" value="${esc(a.name || '')}"/></div>
+      <div class="field"><label>Role</label><select id="aeRole" ${lock ? 'disabled' : ''}><option value="admin" ${a.role !== 'super' ? 'selected' : ''}>Admin</option><option value="super" ${a.role === 'super' ? 'selected' : ''}>Super admin</option></select></div>
+      <div id="aePerms" ${a.role === 'super' ? 'hidden' : ''}><label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Permissions</label>${permBoxes(a.perms || {})}</div>
+      <div class="err" id="aeErr"></div><button class="btn btn-blue btn-block" id="aeBtn">Save</button>`);
+    m.$('#aeRole').onchange = e => { m.$('#aePerms').hidden = e.target.value === 'super'; };
+    m.$('#aeBtn').onclick = () => run(m.$('#aeBtn'), async () => {
+      const role = lock ? a.role : m.$('#aeRole').value;
+      await db.collection('admins').doc(a.id).update({ name: m.$('#aeName').value.trim(), role, perms: role === 'super' ? ALLPERMS : readPerms(m.el) });
+      m.close(); toast('Admin updated', 'ok'); views.admins.load();
+    });
+  },
+  async adminDel(d) {
+    const a = adminList.find(x => x.id === d.id); if (!a || a.id === me.id) return;
+    if (a.founder) {
+      const m = modal(`<h2 class="mh">Delete founder account</h2><p class="msub">Enter the <b>master delete password</b> that was set during first-time setup.</p>
+        <div class="field"><input id="mpIn" type="password" autocomplete="off"/></div><div class="err" id="mpErr"></div>
+        <button class="btn btn-primary btn-block" id="mpBtn">Verify & delete</button>`);
+      m.$('#mpBtn').onclick = () => run(m.$('#mpBtn'), async () => {
+        const s = await db.collection('secure').doc('master').get();
+        if (!s.exists) { m.$('#mpErr').textContent = 'Master password record not found.'; return; }
+        const h = await sha256(s.data().salt + m.$('#mpIn').value);
+        if (h !== s.data().hash) { m.$('#mpErr').textContent = 'Wrong master password.'; return; }
+        await db.collection('admins').doc(a.id).delete(); m.close(); toast('Founder deleted', 'ok'); views.admins.load();
+      });
+      return;
+    }
+    if (!await confirmBox(`Delete admin <b>${esc(a.name || a.email)}</b>? They will lose all access immediately.`, { okText: 'Delete', danger: true })) return;
+    try { await db.collection('admins').doc(a.id).delete(); toast('Admin deleted', 'ok'); views.admins.load(); } catch (e) { toast(errMsg(e), 'err'); }
+  }
+};
+const C = {
+  rgDate(el) { regF.date = el.value; regF.limit = 100; views.registrations.refresh(); },
+  atDate(el) { attF.date = el.value; views.attendance.refresh(); },
+  repM(el) { repMonth = el.value; views.reports.refresh(); },
+  stMonth(el) { stMonth = el.value; views.storage.refresh(); },
+  stEarlier(el) { stEarlier = el.checked; views.storage.refresh(); },
+  photoCap(el) { db.collection('gallery').doc(el.dataset.id).update({ caption: el.value.trim() }).then(() => toast('Caption saved', 'ok')).catch(e => toast(errMsg(e), 'err')); }
+};
+const I = {
+  rgQ(el) { regF.q = el.value; regF.limit = 100; views.registrations.refresh(); },
+  atQ(el) { attF.q = el.value; views.attendance.refresh(); }
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (t && A[t.dataset.act]) { e.preventDefault(); A[t.dataset.act](t.dataset, t, e); }
+});
+document.addEventListener('change', e => { const t = e.target.closest('[data-chg]'); if (t && C[t.dataset.chg]) C[t.dataset.chg](t); });
+document.addEventListener('input', e => { const t = e.target.closest('[data-inp]'); if (t && I[t.dataset.inp]) I[t.dataset.inp](t); });
+
+boot();
+</script>
+<script src="rent-data.js"></script>
+<script src="admin-rentals.js"></script>
+<script src="admin-errors.js"></script>
+<script src="admin-finance.js"></script>
+</body>
+</html>
