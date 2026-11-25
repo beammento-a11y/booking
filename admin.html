@@ -369,6 +369,38 @@ function subscribe() {
   unsubs.push(db.collection('examDates').orderBy('date').onSnapshot(s => { dates = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 1; repeatKick(); refresh(); }, bad));
   unsubs.push(db.collection('slots').onSnapshot(s => { slots = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 2; repeatKick(); refresh(); }, bad));
   unsubs.push(db.collection('bookings').onSnapshot(s => { bookings = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
+  setTimeout(bookingPrune, 8000);
+}
+// keep the database small: exam dates/slots/registrations, mock-test slots/requests, and rental bookings
+// from more than 30 days ago are removed automatically (same idea as the error-log auto-delete).
+// This never touches the Google Sheet – the sheet keeps whatever was last synced, and a deleted record
+// is never sent to it again (nothing here calls sheetQueue / sheetSend).
+async function bookingPrune() {
+  if (!can('storage')) return;
+  try {
+    const cutoff = addDays(todayStr(), -30);
+    const [oldDates, oldSlots, oldBookings, oldMockSlots, oldMockBookings, oldRent] = await Promise.all([
+      db.collection('examDates').where('date', '<', cutoff).limit(300).get(),
+      db.collection('slots').where('date', '<', cutoff).limit(300).get(),
+      db.collection('bookings').where('date', '<', cutoff).limit(300).get(),
+      db.collection('mockSlots').where('date', '<', cutoff).limit(300).get(),
+      db.collection('mockBookings').where('date', '<', cutoff).limit(300).get(),
+      db.collection('rentBookings').where('date', '<', cutoff).limit(300).get()
+    ]);
+    const ops = [
+      ...oldBookings.docs.map(d => ({ t: 'del', ref: d.ref })),
+      ...oldSlots.docs.map(d => ({ t: 'del', ref: d.ref })),
+      ...oldDates.docs.map(d => ({ t: 'del', ref: d.ref })),
+      ...oldMockBookings.docs.map(d => ({ t: 'del', ref: d.ref })),
+      ...oldMockSlots.docs.map(d => ({ t: 'del', ref: d.ref })),
+      ...oldRent.docs.reduce((acc, d) => acc.concat([
+        { t: 'del', ref: d.ref },
+        { t: 'del', ref: db.collection('rentSlips').doc(d.id) },
+        { t: 'del', ref: db.collection('rentSlips').doc(d.id + '_bal') }
+      ]), [])
+    ];
+    if (ops.length) await commitOps(ops);
+  } catch (e) { /* best-effort background cleanup – never interrupts the admin */ }
 }
 /* ---------- WEEKLY REPEAT (only for exam dates where the admin pressed "Repeat every week") ----------
    Each repeating date keeps the next 8 weeks of exam days ready (same weekday, same time slots, seats reset to 0).
