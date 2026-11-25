@@ -128,6 +128,8 @@ footer a{color:#9ec5ff}
 .mk-sec h5{font-size:12px;margin:14px 0 6px;color:var(--navy);text-transform:uppercase;letter-spacing:.05em}
 .mk-chip{display:inline-block;margin:0 6px 6px 0;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--soft);color:var(--text);border:1px solid var(--line)}
 .mk-chip.ex{background:rgba(192,0,26,.12)}
+.mk-pick{cursor:pointer;font-family:inherit;color:inherit}
+.mk-pick.on{background:var(--red);color:#fff;border-color:var(--red)}
 .mk-agree{display:flex;gap:9px;align-items:flex-start;font-size:13px;margin:14px 0 4px;cursor:pointer}
 .mk-agree input{margin-top:3px}
 .mk-note{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;white-space:pre-wrap}
@@ -484,16 +486,15 @@ async function lookupCode() {
   } catch (e) { toast('Invalid code', 'err'); }
 }
 
-/* ---------------- MOCK TEST (a separate request form – the admin approves it) ---------------- */
+/* ---------------- MOCK TEST (a separate request form – the admin adds the time slots + seats and approves each request) ---------------- */
 const MK_DEF = {
-  enabled: true, duration: 60, openTime: '09:00', closeTime: '18:00', step: 30, buffer: 0, maxDays: 60,
-  intro: 'Practise a one-to-one mock test at a time that suits you. Pick a date, choose a free timing and send your request. We will confirm it on WhatsApp.',
-  instructions: 'Choose a date, then one of the free timings shown.\nYour request is only a request – it is confirmed when the admin approves it.\nAfter approval we will message you on WhatsApp.\nYou can see the approval on this page under “My Mock Test Requests”.',
-  terms: 'Arrive (or log in) 15 minutes before your approved time.\nA mock test cannot be moved to another time on the same day.\nIf you cannot come, cancel your request or message us on WhatsApp early.\nThe admin may change or reject a request if the time is not free.'
+  enabled: true, maxDays: 60,
+  intro: 'Practise a one-to-one mock test at a time that suits you. Pick a date, choose a time slot and send your request. We will confirm it on WhatsApp.',
+  instructions: 'Choose a date, then one of the time slots shown.\nYour request is only a request – it is confirmed when the admin approves it.\nAfter approval we will message you on WhatsApp.\nYou can see the approval on this page under “My Mock Test Requests”.',
+  terms: 'Arrive (or log in) 15 minutes before your approved time.\nA mock test cannot be moved to another time on the same day.\nIf you cannot come, cancel your request or message us on WhatsApp early.\nThe admin may reject a request if needed.'
 };
-let mock = Object.assign({}, MK_DEF), mockBusy = {}, mockIds = JSON.parse(localStorage.getItem('mb_mock') || '[]'), mockDocs = {}, mockSubs = {}, mockModal = null, mockSel = null, mockDate = '';
+let mock = Object.assign({}, MK_DEF), mockSlots = [], mockIds = JSON.parse(localStorage.getItem('mb_mock') || '[]'), mockDocs = {}, mockSubs = {}, mockModal = null, mockSel = null, mockDate = '';
 const mkMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
-const mkT = n => pad(Math.floor(n / 60)) + ':' + pad(n % 60);
 const mkLines = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
 const mkRange = (a, b) => fmtTime(a) + ' – ' + fmtTime(b);
 async function loadMock() {
@@ -501,39 +502,33 @@ async function loadMock() {
   const on = mock.enabled !== false;
   ['mockHeroBtn', 'mockNavBtn'].forEach(id => { const el = $('#' + id); if (el) el.hidden = !on; });
   $('#mymock').hidden = !on && !mockIds.length;
+  db.collection('mockSlots').where('date', '>=', todayStr()).orderBy('date').onSnapshot(sn => { mockSlots = sn.docs.map(d => ({ id: d.id, ...d.data() })); if (mockModal) mockRenderInfo(); }, () => { /* slots could not be read */ });
   mockIds.forEach(watchMock); renderMock();
 }
-/* what is taken on a day: simulation exam slots + APPROVED mock tests (public list without names) */
-function mockBusyList(date) {
-  const out = slots.filter(s => s.date === date).map(s => ({ s: mkMin(s.time), e: mkMin(s.endTime || addMinutes(s.time, 120)) }));
-  (mockBusy[date] || []).forEach(i => out.push({ s: mkMin(i.start), e: mkMin(i.end) }));
-  return out;
-}
-function mockFree(date) {
-  const dur = Number(mock.duration) || 60, step = Math.max(5, Number(mock.step) || 30), buf = Number(mock.buffer) || 0, open = mkMin(mock.openTime), close = mkMin(mock.closeTime), busy = mockBusyList(date), out = [];
-  for (let t = open; t + dur <= close; t += step) {
-    if (busy.some(b => t < b.e + buf && t + dur > b.s - buf)) continue;
-    if (ts(date, mkT(t)) <= Date.now()) continue;
-    out.push(t);
-  }
-  return out;
-}
-async function mockLoadBusy(date) {
-  try { const s = await db.collection('mockBusy').doc(date).get(); mockBusy[date] = s.exists ? (s.data().items || []) : []; } catch (e) { mockBusy[date] = mockBusy[date] || []; }
-}
+const mockSlotsOf = date => mockSlots.filter(s => s.date === date).sort((a, b) => a.time.localeCompare(b.time));
 function mockRenderInfo() {
   const box = mockModal && mockModal.$('#mkInfo'); if (!box) return;
-  if (!mockDate) { box.innerHTML = '<p class="help">Pick a date to see that day’s simulation exams, the mock tests already booked and the free timings.</p>'; return; }
-  const ex = slots.filter(s => s.date === mockDate).sort((a, b) => a.time.localeCompare(b.time));
-  const mk = (mockBusy[mockDate] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
-  const free = mockFree(mockDate), dur = Number(mock.duration) || 60;
-  if (mockSel != null && !free.includes(mockSel)) mockSel = null;
-  box.innerHTML = `<div class="mk-sec"><h5>📅 ${fmtDate(mockDate)}</h5>
-    <h5>Simulation exams on this day</h5>${ex.length ? ex.map(s => { const d = dates.find(x => x.id === s.dateId); return `<span class="mk-chip ex">${esc((d && d.title) || 'PTE Simulation Exam')} · ${mkRange(s.time, s.endTime || addMinutes(s.time, 120))}</span>`; }).join('') : '<span class="muted" style="font-size:13px">No simulation exam on this day</span>'}
-    <h5>Mock tests already booked</h5>${mk.length ? mk.map(i => `<span class="mk-chip">${mkRange(i.start, i.end)}</span>`).join('') : '<span class="muted" style="font-size:13px">No mock tests booked yet</span>'}
-    <h5>Available timings (${dur} minutes each)</h5>
-    ${free.length ? free.map(t => `<div class="so ${mockSel === t ? 'sel' : ''}" data-t="${t}"><span class="dot"></span><span class="t">${mkRange(mkT(t), mkT(t + dur))}</span><span class="s" style="color:var(--ok)">Free</span></div>`).join('') : '<div class="empty" style="padding:14px">No free timing on this day. Please choose another date.</div>'}</div>`;
-  $$('.so', box).forEach(el => el.onclick = () => { mockSel = Number(el.dataset.t); mockRenderInfo(); });
+  const now = Date.now(), maxD = dstr(new Date(now + (Number(mock.maxDays) || 60) * 86400000));
+  const openDates = [...new Set(mockSlots.filter(s => s.date <= maxD && slotStatus(s, null, now) === 'open').map(s => s.date))].sort().slice(0, 14);
+  const chips = openDates.length ? `<h5>Dates with mock test time slots</h5>${openDates.map(d => `<button type="button" class="mk-chip mk-pick ${d === mockDate ? 'on' : ''}" data-d="${d}">${fmtDate(d, true)}</button>`).join('')}` : '<p class="help">No mock test time slots are open right now. Please check again soon.</p>';
+  let body = '';
+  if (!mockDate) body = openDates.length ? '<p class="help" style="margin-top:8px">Pick a date above (or use the calendar below) to see the time slots.</p>' : '';
+  else {
+    const ex = slots.filter(s => s.date === mockDate).sort((a, b) => a.time.localeCompare(b.time)), sl = mockSlotsOf(mockDate);
+    if (mockSel && !sl.some(s => s.id === mockSel && slotStatus(s, null, now) === 'open')) mockSel = null;
+    body = `<h5>📅 ${fmtDate(mockDate)}</h5>
+      <h5>Simulation exams on this day</h5>${ex.length ? ex.map(s => { const d = dates.find(x => x.id === s.dateId); return `<span class="mk-chip ex">${esc((d && d.title) || 'PTE Simulation Exam')} · ${mkRange(s.time, s.endTime || addMinutes(s.time, 120))}</span>`; }).join('') : '<span class="muted" style="font-size:13px">No simulation exam on this day</span>'}
+      <h5>Mock test time slots</h5>
+      ${sl.length ? sl.map(s => {
+        const stt = slotStatus(s, null, now), si = seatInfo(s), can = stt === 'open';
+        const label = stt === 'full' ? 'Full' : stt === 'started' ? 'Started' : si.text;
+        const col = can ? (!si.unlimited && si.left <= 2 ? 'var(--red)' : 'var(--ok)') : 'var(--muted)';
+        return `<div class="so ${can ? '' : 'dis'} ${mockSel === s.id ? 'sel' : ''}" data-id="${s.id}" data-can="${can ? 1 : 0}"><span class="dot"></span><span class="t">${slotLabel(s)}</span><span class="s" style="color:${col}">${label}</span></div>`;
+      }).join('') : '<div class="empty" style="padding:14px">No mock test time slots on this day. Please choose another date.</div>'}`;
+  }
+  box.innerHTML = `<div class="mk-sec">${chips}${body}</div>`;
+  $$('.mk-pick', box).forEach(el => el.onclick = () => { mockDate = el.dataset.d; mockSel = null; mockModal.$('#mDate').value = mockDate; mockRenderInfo(); });
+  $$('.so', box).forEach(el => el.onclick = () => { if (el.dataset.can !== '1') return; mockSel = el.dataset.id; mockRenderInfo(); });
 }
 function openMock() {
   if (!CONFIGURED) { toast('Site not configured yet', 'err'); return; }
@@ -561,7 +556,7 @@ function openMock() {
   if (saved.email) mockModal.$('#mEmail').value = saved.email;
   if (saved.phone) mockModal.$('#mPhone').value = saved.phone;
   mockRenderInfo();
-  mockModal.$('#mDate').onchange = async e => { mockDate = e.target.value; mockSel = null; if (mockDate) { mockModal.$('#mkInfo').innerHTML = '<div class="empty"><div class="spin dark"></div></div>'; await mockLoadBusy(mockDate); } mockRenderInfo(); };
+  mockModal.$('#mDate').onchange = e => { mockDate = e.target.value; mockSel = null; mockRenderInfo(); };
   mockModal.$('#mkForm').onsubmit = e => { e.preventDefault(); submitMock(); };
 }
 async function submitMock() {
@@ -572,16 +567,25 @@ async function submitMock() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Please enter a valid email.'; return; }
   if (!/^[+\d][\d\s\-]{6,18}$/.test(phone)) { err.textContent = 'Please enter a valid phone number.'; return; }
   if (!mockDate) { err.textContent = 'Please choose a date.'; return; }
-  if (mockSel == null) { err.textContent = 'Please choose one of the free timings.'; return; }
+  const s = mockSlots.find(x => x.id === mockSel);
+  if (!s) { err.textContent = 'Please choose one of the time slots.'; return; }
   if (!m.$('#mAgree').checked) { err.textContent = 'Please tick “I agree” to send your request.'; return; }
+  if (Object.values(mockDocs).some(b => b && b.slotId === s.id && ['pending', 'approved'].includes(b.status))) { err.textContent = 'You already requested this time slot on this device.'; return; }
   const btn = m.$('#mkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
-  await mockLoadBusy(mockDate);                                              // fresh check: the timing may have been taken a moment ago
-  if (!mockFree(mockDate).includes(mockSel)) { err.textContent = 'Sorry, that timing is no longer free. Please choose another one.'; mockSel = null; mockRenderInfo(); btn.disabled = false; btn.textContent = 'Send mock test request'; return; }
-  const dur = Number(mock.duration) || 60;
-  const data = { name, email, phone, date: mockDate, time: mkT(mockSel), endTime: mkT(mockSel + dur), duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
+  const dur = Math.max(15, mkMin(s.endTime) - mkMin(s.time)) || 60;
+  const data = { slotId: s.id, name, email, phone, date: s.date, time: s.time, endTime: s.endTime, duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
   const bref = db.collection('mockBookings').doc();
-  try { await bref.set(data); }
-  catch (e) { err.textContent = (e && e.code === 'permission-denied') ? 'Mock test requests are not switched on yet. Please try again later or contact us.' : errMsg(e); btn.disabled = false; btn.textContent = 'Send mock test request'; return; }
+  try {
+    await db.runTransaction(async tx => {                                   // the seat is taken in the same transaction (like the exam)
+      const sref = db.collection('mockSlots').doc(s.id), snap = await tx.get(sref);
+      if (!snap.exists) throw new Error('This time slot is no longer available.');
+      const sd = snap.data();
+      if (sd.capacity != null && (sd.booked || 0) >= sd.capacity) throw new Error('Sorry, this slot just became full. Please choose another one.');
+      if (Date.now() >= slotStart({ date: sd.date, time: sd.time })) throw new Error('This time slot has already started.');
+      tx.update(sref, { booked: (sd.booked || 0) + 1 });
+      tx.set(bref, data);
+    });
+  } catch (e) { err.textContent = (e && e.code === 'permission-denied') ? 'Mock test requests are not switched on yet. Please try again later or contact us.' : errMsg(e); btn.disabled = false; btn.textContent = 'Send mock test request'; mockSel = null; mockRenderInfo(); return; }
   localStorage.setItem('mb_profile', JSON.stringify({ name, email, phone }));
   mockIds.push(bref.id); localStorage.setItem('mb_mock', JSON.stringify(mockIds)); mockDocs[bref.id] = { id: bref.id, ...data }; watchMock(bref.id); renderMock();
   m.body.innerHTML = `<div class="okbox"><div class="big">✓</div><h2 class="mh" style="padding:0">Request sent!</h2>
@@ -625,8 +629,18 @@ function renderMock() {
 }
 function dropMock(id) { mockIds = mockIds.filter(x => x !== id); delete mockDocs[id]; if (mockSubs[id]) { mockSubs[id](); delete mockSubs[id]; } localStorage.setItem('mb_mock', JSON.stringify(mockIds)); renderMock(); }
 async function cancelMock(id) {
-  if (!await confirmBox('Your mock test request will be cancelled.', { okText: 'Yes, cancel', danger: true, title: 'Cancel request?' })) return;
-  try { await db.collection('mockBookings').doc(id).update({ status: 'cancelled', cancelledAt: Date.now() }); toast('Request cancelled', 'ok'); } catch (e) { toast(errMsg(e), 'err'); }
+  if (!await confirmBox('Your mock test request will be cancelled and the seat will be free for another student.', { okText: 'Yes, cancel', danger: true, title: 'Cancel request?' })) return;
+  try {
+    await db.runTransaction(async tx => {
+      const bref = db.collection('mockBookings').doc(id), bs = await tx.get(bref);
+      if (!bs.exists) throw new Error('Request not found.');
+      const bd = bs.data(); if (bd.status !== 'pending') throw new Error('Only a request that is still waiting can be cancelled.');
+      const sref = bd.slotId ? db.collection('mockSlots').doc(bd.slotId) : null, ss = sref ? await tx.get(sref) : null;
+      tx.update(bref, { status: 'cancelled', cancelledAt: Date.now() });
+      if (ss && ss.exists) tx.update(sref, { booked: Math.max(0, (ss.data().booked || 0) - 1) });
+    });
+    toast('Request cancelled', 'ok');
+  } catch (e) { toast(errMsg(e), 'err'); }
 }
 async function lookupMock() {
   const c = $('#mockCodeIn').value.trim(); if (!c) return;
