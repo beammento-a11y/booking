@@ -207,7 +207,7 @@ const NAV = [
 const view = $('#view');
 let me = null, user = null, dates = [], slots = [], bookings = [], unsubs = [];
 let current = 'dashboard', activePanel = null, storageInfo = null;
-let settingUp = false, setupDone = false, authNotice = '', started = false;
+let setupReady = Promise.resolve(), settingUp = false, setupDone = false, authNotice = '', started = false;
 
 const can = p => !!me && (me.role === 'super' || (me.perms && me.perms[p] === true));
 const slotsOf = id => slots.filter(s => s.dateId === id).sort((a, b) => a.time.localeCompare(b.time));
@@ -248,13 +248,14 @@ async function boot() {
     $('#boot').innerHTML = '<div style="max-width:420px;text-align:center;padding:20px"><h2>Firebase config missing</h2><p style="margin-top:8px">common.js file එකේ <b>firebaseConfig</b> එක paste කරන්න. (README.md බලන්න)</p></div>';
     return;
   }
-  try { const s = await db.collection('meta').doc('setup').get(); setupDone = s.exists; }
-  catch (e) { $('#boot').innerHTML = '<div style="max-width:440px;text-align:center;padding:20px"><h2>Cannot reach the database</h2><p style="margin-top:8px">' + esc(errMsg(e)) + '</p><p class="help">Firestore database create කරලා rules publish කළාද බලන්න.</p></div>'; return; }
+  /* the 'is setup done' check and the login/session restore now run at the SAME time (before: one after the other) */
+  setupReady = db.collection('meta').doc('setup').get().then(s => { setupDone = s.exists; });
+  setupReady.catch(e => { $('#boot').innerHTML = '<div style="max-width:440px;text-align:center;padding:20px"><h2>Cannot reach the database</h2><p style="margin-top:8px">' + esc(errMsg(e)) + '</p><p class="help">Firestore database create කරලා rules publish කළාද බලන්න.</p></div>'; });
   auth.onAuthStateChanged(onAuth);
 }
 async function onAuth(u) {
   if (settingUp) return;
-  if (!u) { stopApp(); showAuth(setupDone ? 'login' : 'setup'); return; }
+  if (!u) { stopApp(); try { await setupReady; } catch (e) { return; } showAuth(setupDone ? 'login' : 'setup'); return; }
   if (started && user && user.uid === u.uid) return;
   try {
     const snap = await db.collection('admins').doc(u.uid).get();
@@ -365,9 +366,48 @@ function renderNav() {
 }
 function subscribe() {
   const bad = e => toast('Live data error: ' + errMsg(e), 'err');
-  unsubs.push(db.collection('examDates').orderBy('date').onSnapshot(s => { dates = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
-  unsubs.push(db.collection('slots').onSnapshot(s => { slots = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
+  unsubs.push(db.collection('examDates').orderBy('date').onSnapshot(s => { dates = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 1; repeatKick(); refresh(); }, bad));
+  unsubs.push(db.collection('slots').onSnapshot(s => { slots = s.docs.map(d => ({ id: d.id, ...d.data() })); _repLoad |= 2; repeatKick(); refresh(); }, bad));
   unsubs.push(db.collection('bookings').onSnapshot(s => { bookings = s.docs.map(d => ({ id: d.id, ...d.data() })); refresh(); }, bad));
+}
+/* ---------- WEEKLY REPEAT (only for exam dates where the admin pressed "Repeat every week") ----------
+   Each repeating date keeps the next 8 weeks of exam days ready (same weekday, same time slots, seats reset to 0).
+   Every exam day is its own date, so each day keeps its own registrations, attendance and report, and becomes "Completed" by itself. */
+const REPEAT_WEEKS = 8;
+let _repLoad = 0, _repDone = false, _repBusy = false;
+const addDays = (ds, n) => { const [y, m, d] = ds.split('-').map(Number); return dstr(new Date(y, m - 1, d + n)); };
+function repeatKick() { if (_repDone || _repLoad !== 3) return; _repDone = true; setTimeout(() => repeatTopUp(true), 1200); }
+async function repeatTopUp(quiet) {
+  if (_repBusy || !me || !can('dates')) return 0;
+  _repBusy = true; let made = 0;
+  try {
+    const today = todayStr(), horizon = addDays(today, REPEAT_WEEKS * 7);
+    const groups = {};
+    dates.filter(d => d.repeatWeekly === true).forEach(d => { (groups[d.seriesId || d.id] = groups[d.seriesId || d.id] || []).push(d); });
+    for (const sid of Object.keys(groups)) {
+      const mem = groups[sid].sort((a, b) => a.date.localeCompare(b.date));
+      const last = mem[mem.length - 1];
+      const tpl = mem.slice().reverse().find(m => slotsOf(m.id).length);          // newest day that has time slots = the pattern to copy
+      if (!tpl) continue;
+      const tsl = slotsOf(tpl.id);
+      let t = addDays(last.date, 7);
+      while (t < today) t = addDays(t, 7);                                          // never create days in the past
+      for (; t <= horizon; t = addDays(t, 7)) {
+        if (dates.some(x => x.date === t)) continue;                                // an exam already exists that day
+        const did = sid + '_' + t, dref = db.collection('examDates').doc(did);
+        const ok = await db.runTransaction(async tx => {
+          if ((await tx.get(dref)).exists) return false;                            // safe if two admins open the panel together
+          tx.set(dref, { date: t, title: tpl.title || 'PTE Simulation Exam', notes: tpl.notes || '', closed: false, createdAt: Date.now(), repeatWeekly: true, seriesId: sid });
+          tsl.forEach((sl, i) => tx.set(db.collection('slots').doc(did + '_' + i), { dateId: did, date: t, time: sl.time, endTime: sl.endTime || null, capacity: sl.capacity == null ? null : sl.capacity, booked: 0, createdAt: Date.now() }));
+          return true;
+        });
+        if (ok) { made++; sheetQueue({ dates: [did] }); }
+      }
+    }
+    if (made) toast('🔁 ' + made + ' weekly exam date' + (made > 1 ? 's' : '') + ' created automatically', 'ok');
+  } catch (e) { if (!quiet) toast(errMsg(e), 'err'); console.warn('weekly repeat', e); }
+  finally { _repBusy = false; }
+  return made;
 }
 let _rf = 0;
 function refresh() {
@@ -409,9 +449,11 @@ async function computeStorage() {
   bookings.forEach(({ id, ...r }) => parts['Bookings'] += sz(id, r));
   try { rentBookings.forEach(({ id, ...r }) => parts['Rentals'] += sz(id, r)); rentSpaces.forEach(({ id, ...r }) => parts['Rentals'] += sz(id, r)); } catch (e) { /* rentals module not loaded */ }
   try { errLogs.forEach(({ id, ...r }) => parts['Error log'] += sz(id, r)); } catch (e) { /* ignore */ }
-  try { const g = await db.collection('gallery').get(); g.forEach(d => parts['Photos'] += sz(d.id, d.data())); } catch (e) { /* no access */ }
-  try { const s = await db.collection('settings').get(); s.forEach(d => parts['Settings'] += sz(d.id, d.data())); } catch (e) { /* ignore */ }
-  try { const a = await db.collection('admins').get(); a.forEach(d => parts['Admins'] += sz(d.id, d.data())); } catch (e) { parts['Admins'] = 800; }
+  /* gallery + settings + admins are read at the same time (before: one after the other) */
+  const [g, s, a] = await Promise.all([db.collection('gallery').get().catch(() => null), db.collection('settings').get().catch(() => null), db.collection('admins').get().catch(() => null)]);
+  if (g) g.forEach(d => parts['Photos'] += sz(d.id, d.data()));
+  if (s) s.forEach(d => parts['Settings'] += sz(d.id, d.data()));
+  if (a) a.forEach(d => parts['Admins'] += sz(d.id, d.data())); else parts['Admins'] = 800;
   const used = Object.values(parts).reduce((a, b) => a + b, 0);
   storageInfo = { parts, used, limit: getLimit(), at: Date.now() };
   updateChip();
@@ -555,7 +597,9 @@ function renderDay(body, ds) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-blue btn-sm" data-act="saveDate" data-id="${d.id}">💾 Save changes</button>
       <button class="btn btn-ghost btn-sm" data-act="toggleClose" data-id="${d.id}">${d.closed ? '🔓 Re-open registration' : '🔒 Close registration'}</button>
+      <button class="btn ${d.repeatWeekly ? 'btn-primary' : 'btn-ghost'} btn-sm" data-act="toggleRepeat" data-id="${d.id}">${d.repeatWeekly ? '🔁 Repeating weekly – turn off' : '🔁 Repeat every week'}</button>
       <button class="btn btn-danger btn-sm" data-act="delDate" data-id="${d.id}">🗑 Delete date</button></div>
+    ${d.repeatWeekly ? `<p class="help" style="margin-bottom:6px">🔁 This exam repeats every ${new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })} with these same time slots. The next ${REPEAT_WEEKS} weeks are created automatically; each day gets its own registrations and report and becomes “Completed” by itself.</p>` : ''}
     <h3 style="margin:20px 0 10px;font-size:15px">Time slots</h3>
     ${sl.length ? `<div class="tw"><table><thead><tr><th>Time</th><th>Seat limit</th><th>Registered</th><th></th></tr></thead><tbody>
       ${sl.map(s => `<tr><td><b>${slotLabel(s)}</b></td><td>${s.capacity == null ? 'No limit' : s.capacity}</td><td>${regsOfSlot(s.id).length}</td>
@@ -744,8 +788,8 @@ views.content = {
   async render() {
     view.innerHTML = '<div class="empty"><div class="spin dark"></div></div>';
     try {
-      const s = await db.collection('settings').doc('site').get(); siteData = s.exists ? s.data() : {};
-      const g = await db.collection('gallery').orderBy('order').get(); galDocs = g.docs.map(d => ({ id: d.id, ...d.data() }));
+      const [s, g] = await Promise.all([db.collection('settings').doc('site').get(), db.collection('gallery').orderBy('order').get()]);
+      siteData = s.exists ? s.data() : {}; galDocs = g.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (e) { view.innerHTML = '<div class="empty">' + esc(errMsg(e)) + '</div>'; return; }
     if (current !== 'content') return;
     this.paint();
@@ -1054,6 +1098,24 @@ const A = {
       const cur = dates.find(x => x.id === d.id);
       await db.collection('examDates').doc(cur.id).update({ closed: !cur.closed });
       toast(cur.closed ? 'Registration re-opened' : 'Registration closed', 'ok'); setTimeout(rerenderPanel, 150);
+    });
+  },
+  toggleRepeat(d, el) {
+    return run(el, async () => {
+      const cur = dates.find(x => x.id === d.id);
+      if (!cur.repeatWeekly) {
+        if (!slotsOf(cur.id).length) throw new Error('Add at least one time slot first – the weekly repeat copies these slots.');
+        const sid = cur.seriesId || cur.id;
+        await db.collection('examDates').doc(cur.id).update({ repeatWeekly: true, seriesId: sid });
+        cur.repeatWeekly = true; cur.seriesId = sid;                                 // use it right away, the live update arrives a moment later
+        const n = await repeatTopUp(false);
+        toast(n ? 'Repeat is ON – ' + n + ' weekly exam date' + (n > 1 ? 's' : '') + ' created' : 'Repeat is ON', 'ok');
+      } else {
+        const sid = cur.seriesId || cur.id;
+        await commitOps(dates.filter(x => (x.seriesId || x.id) === sid && x.repeatWeekly === true).map(x => ({ t: 'upd', ref: db.collection('examDates').doc(x.id), data: { repeatWeekly: false } })));
+        toast('Repeat is OFF – no more weekly dates will be created. Dates already created stay (delete any you do not need).', 'ok');
+      }
+      setTimeout(rerenderPanel, 150);
     });
   },
   async delDate(d, el) {
