@@ -167,7 +167,7 @@ footer a{color:#9ec5ff}
   <div class="announce" id="announce" hidden><div id="announceTxt"></div></div>
 
   <section class="sec" id="dates">
-    <div class="sec-h"><h2>Upcoming Exam Dates</h2><p>Choose a date and a time slot. Remaining seats update live.</p></div>
+    <div class="sec-h"><h2>Upcoming Exam Dates</h2><p>Choose a date and a time slot. Remaining seats update live.<span id="examPriceLine"></span></p></div>
     <div class="dgrid" id="dateGrid"><div class="empty" style="grid-column:1/-1"><div class="spin dark"></div></div></div>
   </section>
 
@@ -181,7 +181,7 @@ footer a{color:#9ec5ff}
   </section>
 
   <section class="sec" id="mymock">
-    <div class="sec-h"><h2>My Mock Test Requests</h2><p>Your mock test requests made on this device. When the admin approves a request, it shows up here.</p></div>
+    <div class="sec-h"><h2>My Mock Test Requests</h2><p>Your mock test requests made on this device. When the admin approves a request, it shows up here.<span id="mockPriceLine"></span></p></div>
     <div class="mygrid" id="mockGrid"></div>
     <div class="lookup">
       <input id="mockCodeIn" placeholder="Have a mock test code? Paste it here"/>
@@ -225,6 +225,7 @@ const DEF_RULES = [
   'Your booking is confirmed only when you see the confirmation code.'
 ];
 const DEF_DESC = 'The MentoBeam Simulation Exam gives you the real PTE test experience – same format, same timing – so you know exactly where you stand before exam day.';
+const money = n => 'Rs ' + Number(n || 0).toLocaleString('en-US');
 
 let dates = [], slots = [], site = {};
 let myIds = JSON.parse(localStorage.getItem('mb_my') || '[]');
@@ -252,6 +253,7 @@ async function loadSite() {
   if (hT) $('#heroTitle').textContent = hT;
   if (site.welcomeMsg) $('#heroMsg').textContent = site.welcomeMsg;
   if (site.announcement) { $('#announce').hidden = false; $('#announceTxt').textContent = '📢 ' + site.announcement; }
+  $('#examPriceLine').textContent = Number(site.examPrice) > 0 ? ` Fee: ${money(site.examPrice)} per registration (payable at the venue).` : '';
   $('#descTxt').textContent = site.description || DEF_DESC;
   const rules = (site.rules || '').split('\n').map(x => x.trim()).filter(Boolean);
   $('#rulesList').innerHTML = (rules.length ? rules : DEF_RULES).map(r => `<li><span>${esc(r)}</span></li>`).join('');
@@ -357,7 +359,7 @@ function openRegister(pre) {
   selSlot = pre || null;
   regModal = modal(`
     <h2 class="mh">Register for Simulation Exam</h2>
-    <p class="msub">Enter your details, then choose your exam date & time.</p>
+    <p class="msub">Enter your details, then choose your exam date & time.${Number(site.examPrice) > 0 ? ` <b>Fee: ${money(site.examPrice)}</b> (payable at the venue).` : ''}</p>
     <form id="regForm" novalidate>
       <div class="field"><label>Full name <span class="req">*</span></label><input id="rName" autocomplete="name" placeholder="Your full name"/></div>
       <div class="field"><label>Email <span class="req">*</span></label><input id="rEmail" type="email" autocomplete="email" placeholder="you@example.com"/></div>
@@ -503,6 +505,7 @@ async function loadMock() {
   const on = mock.enabled !== false;
   ['mockHeroBtn', 'mockNavBtn'].forEach(id => { const el = $('#' + id); if (el) el.hidden = !on; });
   $('#mymock').hidden = !on && !mockIds.length;
+  $('#mockPriceLine').textContent = Number(mock.price) > 0 ? ` Fee: ${money(mock.price)} per mock test (payable at the venue).` : '';
   db.collection('mockSlots').where('date', '>=', todayStr()).orderBy('date').onSnapshot(sn => { mockSlots = sn.docs.map(d => ({ id: d.id, ...d.data() })); if (mockModal) mockRenderInfo(); }, () => { /* slots could not be read */ });
   mockIds.forEach(watchMock); renderMock();
 }
@@ -558,7 +561,7 @@ function openMock() {
   const min = todayStr(), max = dstr(new Date(Date.now() + (Number(mock.maxDays) || 60) * 86400000));
   mockModal = modal(`
     <h2 class="mh">Book a Mock Test</h2>
-    <p class="msub">${esc(mock.intro)}</p>
+    <p class="msub">${esc(mock.intro)}${Number(mock.price) > 0 ? ` <b>Fee: ${money(mock.price)}</b> (payable at the venue).` : ''}</p>
     <div class="mk-box"><h4>📋 Instructions</h4>${ul(mock.instructions)}<h4>⚖️ Terms</h4>${ul(mock.terms)}</div>
     <form id="mkForm" novalidate>
       <div class="field"><label>Full name <span class="req">*</span></label><input id="mName" autocomplete="name" placeholder="Your full name"/></div>
