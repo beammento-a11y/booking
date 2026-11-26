@@ -95,6 +95,14 @@ function incEntries() {
     if (b.balanceVerified && b.balanceReceived > 0 && b.balanceReceivedAt) e.push({ t: b.balanceReceivedAt, type: 'Balance', amt: b.balanceReceived, b });
     if (b.refundStatus === 'paid' && b.refundPaidAmount > 0 && b.refundPaidAt) e.push({ t: b.refundPaidAt, type: 'Refund', amt: -b.refundPaidAmount, b });
   });
+  // PTE Simulation Exam fee – counted once the student is marked Present (that's when the fee is normally collected)
+  (typeof bookings !== 'undefined' ? bookings : []).forEach(b => {
+    if (b.attended === true && b.price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Exam', amt: b.price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'PTE Simulation Exam', packageName: b.examTitle || 'PTE Simulation Exam', date: b.date } });
+  });
+  // Mock test fee – counted once the student is marked Present (same rule as the simulation exam)
+  (typeof mkBookings !== 'undefined' ? mkBookings : []).forEach(b => {
+    if (b.attended === true && b.price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Mock Test', amt: b.price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'Mock Test', packageName: 'Mock Test', date: b.date } });
+  });
   return e.sort((a, b) => b.t - a.t);
 }
 const incIn = (e, per) => !per || fDay(e.t).startsWith(per);
@@ -105,7 +113,7 @@ views.income = {
     const all = incEntries(), now = fDay(Date.now()), months = [...new Set([now.slice(0, 7), ...all.map(e => fDay(e.t).slice(0, 7))])].sort().reverse(), years = [...new Set(months.map(m => m.slice(0, 4)))];
     if (incPeriod === '') incPeriod = now.slice(0, 7);
     const per = incPeriod === 'all' ? '' : incPeriod, ent = all.filter(e => incIn(e, per));
-    const sum = t => ent.filter(e => e.type === t).reduce((a, e) => a + e.amt, 0), adv = sum('Advance'), bal = sum('Balance'), ref = -sum('Refund'), net = adv + bal - ref;
+    const sum = t => ent.filter(e => e.type === t).reduce((a, e) => a + e.amt, 0), adv = sum('Advance'), bal = sum('Balance'), ref = -sum('Refund'), exam = sum('Exam'), mock = sum('Mock Test'), net = adv + bal + exam + mock - ref;
     const conf = rentBookings.filter(b => b.status === 'confirmed' && !b.closed), toCollect = conf.reduce((a, b) => a + payInfo(b).balance, 0);
     const advAwait = rentBookings.filter(b => b.status === 'pending' && b.slipAt).reduce((a, b) => a + (b.advanceDue || 0), 0), owed = fRefunds().filter(b => b.refundStatus === 'requested').reduce((a, b) => a + (b.refundAmount || 0), 0);
     const spaces = {}; ent.forEach(e => { const k = e.b.spaceName || e.b.spaceId; const o = spaces[k] = spaces[k] || { ids: new Set(), got: 0, ref: 0 }; o.ids.add(e.b.id); if (e.amt > 0) o.got += e.amt; else o.ref -= e.amt; });
@@ -114,10 +122,10 @@ views.income = {
     const mx = Math.max(1, ...mm.map(x => Math.abs(x[1])));
     view.innerHTML = `<div class="card box"><div class="fr" style="gap:10px;flex-wrap:wrap;align-items:center"><b>Period</b><select data-chg="incPer" style="max-width:220px"><option value="all" ${incPeriod === 'all' ? 'selected' : ''}>All time</option>${years.map(y => `<option value="${y}" ${incPeriod === y ? 'selected' : ''}>Year ${y}</option>`).join('')}${months.map(m => `<option value="${m}" ${incPeriod === m ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>
       <button class="btn btn-ghost btn-sm" data-act="incCsv">⬇ Download CSV</button><button class="btn btn-primary btn-sm" data-act="incPdf">⬇ Full system report (PDF)</button><span class="muted">cash basis – money counted on the day it was verified / refunded</span></div></div>
-    <div class="stats"><div class="card stat"><i>💰</i><div><b>${rs(adv)}</b><span>Advances received</span></div></div><div class="card stat"><i>🧾</i><div><b>${rs(bal)}</b><span>Balances received</span></div></div><div class="card stat"><i>💸</i><div><b>${rs(ref)}</b><span>Refunds paid</span></div></div><div class="card stat" style="background:linear-gradient(135deg,rgba(47,210,122,.12),transparent)"><i>📈</i><div><b>${rs(net)}</b><span>NET INCOME</span></div></div></div>
+    <div class="stats"><div class="card stat"><i>💰</i><div><b>${rs(adv)}</b><span>Advances received</span></div></div><div class="card stat"><i>🧾</i><div><b>${rs(bal)}</b><span>Balances received</span></div></div><div class="card stat"><i>📝</i><div><b>${rs(exam)}</b><span>Exam fees received</span></div></div><div class="card stat"><i>📝</i><div><b>${rs(mock)}</b><span>Mock test fees received</span></div></div><div class="card stat"><i>💸</i><div><b>${rs(ref)}</b><span>Refunds paid</span></div></div><div class="card stat" style="background:linear-gradient(135deg,rgba(47,210,122,.12),transparent)"><i>📈</i><div><b>${rs(net)}</b><span>NET INCOME</span></div></div></div>
     <div class="stats"><div class="card stat"><i>⏳</i><div><b>${rs(toCollect)}</b><span>Balances still to collect (${conf.length} confirmed)</span></div></div><div class="card stat"><i>📎</i><div><b>${rs(advAwait)}</b><span>Advances awaiting verification</span></div></div><div class="card stat"><i>↩️</i><div><b>${rs(owed)}</b><span>Refunds waiting to be paid</span></div></div></div>
     <div class="card box"><h3>Last 12 months – net income</h3><div style="display:flex;gap:6px;align-items:flex-end;height:130px">${mm.map(([k, v]) => `<div style="flex:1;text-align:center;font-size:10px" title="${monthLabel(k)}: ${rs(v)}"><div style="height:${Math.round(Math.abs(v) / mx * 100)}px;background:${v < 0 ? 'var(--red)' : 'var(--blue2)'};border-radius:6px 6px 0 0;min-height:2px"></div>${k.slice(5)}</div>`).join('')}</div></div>
-    <div class="card box"><h3>By space</h3>${Object.keys(spaces).length ? `<div class="tw"><table><thead><tr><th>Space</th><th>Bookings</th><th>Received</th><th>Refunds</th><th>Net</th></tr></thead><tbody>${Object.entries(spaces).map(([k, o]) => `<tr><td><b>${esc(k)}</b></td><td>${o.ids.size}</td><td>${rs(o.got)}</td><td>${rs(o.ref)}</td><td><b>${rs(o.got - o.ref)}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No income in this period.</p>'}</div>
+    <div class="card box"><h3>By space / exam type</h3>${Object.keys(spaces).length ? `<div class="tw"><table><thead><tr><th>Space / type</th><th>Bookings</th><th>Received</th><th>Refunds</th><th>Net</th></tr></thead><tbody>${Object.entries(spaces).map(([k, o]) => `<tr><td><b>${esc(k)}</b></td><td>${o.ids.size}</td><td>${rs(o.got)}</td><td>${rs(o.ref)}</td><td><b>${rs(o.got - o.ref)}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No income in this period.</p>'}</div>
     <div class="card box"><h3>Transactions (${ent.length})</h3>${ent.length ? `<div class="tw"><table><thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Space / booking date</th><th style="text-align:right">Amount</th></tr></thead><tbody>${ent.map(e => `<tr><td>${fWhen(e.t)}</td><td><span class="badge ${e.type === 'Refund' ? 'b-red' : e.type === 'Advance' ? 'b-blue' : 'b-ok'}">${e.type}</span></td><td>${esc(e.b.name)}<br><span class="muted">${esc(e.b.phone)}</span></td><td>${esc(e.b.spaceName)} · ${fmtDate(e.b.date)}</td><td style="text-align:right;font-weight:700;color:${e.amt < 0 ? 'var(--red)' : 'inherit'}">${e.amt < 0 ? '−' : ''}${rs(Math.abs(e.amt))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No transactions in this period.</p>'}</div>`;
   }
 };
@@ -153,7 +161,7 @@ A.incPdf = async (d, btn) => {
       if (logo) { try { doc.addImage(logo, 'PNG', M, 14, 150, 26.3); } catch (e) { logo = null; } }
       if (!logo) { doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(...NAVY); doc.text('MENTOBEAM', M, 36); }
       doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...NAVY); doc.text('Full System Report', W - M, 28, { align: 'right' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY); doc.text('Rentals  |  ' + pdfT(perLabel) + '  |  Generated ' + stamp + ' by ' + who2, W - M, 43, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GREY); doc.text('Rentals + Exam/Mock income  |  ' + pdfT(perLabel) + '  |  Generated ' + stamp + ' by ' + who2, W - M, 43, { align: 'right' });
       doc.setFillColor(...RED); doc.rect(0, 56, W, 4, 'F');
     };
     const card = (x, y, w, label, val, col) => { doc.setDrawColor(215, 222, 232); doc.setFillColor(247, 249, 252); doc.roundedRect(x, y, w, 46, 5, 5, 'FD'); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...(col || NAVY)); doc.text(pdfT(val), x + 10, y + 22); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GREY); doc.text(pdfT(label), x + 10, y + 36); };
@@ -161,8 +169,8 @@ A.incPdf = async (d, btn) => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...NAVY); doc.text('1. Summary', M, y); y += 10;
     const cw = (W - 2 * M - 7 * 8) / 8;
     [['Bookings', bks.length], ['Pending', cnt('pending')], ['Confirmed', cnt('confirmed')], ['Completed', cnt('completed')], ['Cancelled', can.length], ['Cancelled with slip', canW], ['Cancelled w/o slip', canN, RED], ['Refund requests', rfs.length]].forEach((c, k) => card(M + k * (cw + 8), y, cw, c[0], c[1], c[2]));
-    y += 56; const cw2 = (W - 2 * M - 3 * 8) / 4;
-    [['Advances received', rs(g('Advance'))], ['Balances received', rs(g('Balance'))], ['Refunds paid', rs(Math.abs(g('Refund')))], ['NET INCOME', rs(g('Advance') + g('Balance') + g('Refund')), [18, 161, 80]]].forEach((c, k) => card(M + k * (cw2 + 8), y, cw2, c[0], c[1], c[2]));
+    y += 56; const cw2 = (W - 2 * M - 5 * 8) / 6;
+    [['Advances received', rs(g('Advance'))], ['Balances received', rs(g('Balance'))], ['Exam fees', rs(g('Exam'))], ['Mock test fees', rs(g('Mock Test'))], ['Refunds paid', rs(Math.abs(g('Refund')))], ['NET INCOME', rs(g('Advance') + g('Balance') + g('Exam') + g('Mock Test') + g('Refund')), [18, 161, 80]]].forEach((c, k) => card(M + k * (cw2 + 8), y, cw2, c[0], c[1], c[2]));
     y += 62;
     const common = { margin: { top: 76, left: M, right: M, bottom: 34 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 3.5, lineColor: [215, 222, 232], textColor: [30, 40, 55], overflow: 'linebreak' }, headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' }, alternateRowStyles: { fillColor: [247, 249, 252] }, didDrawPage: header, rowPageBreak: 'avoid' };
     const section = (title, head, body, extra) => {
