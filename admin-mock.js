@@ -92,7 +92,7 @@ function mkListHTML() {
     return `<div class="card box"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
       <div><h3 style="margin:0">${esc(b.name)} ${mkBadge(b)}${b.status === 'approved' ? ' ' + attBadge(b.attended) : ''}</h3>
         <div style="margin-top:6px"><b>📅 ${fmtDate(b.date)}</b> · ⏰ ${fmtTime(b.time)} – ${fmtTime(b.endTime)}</div>
-        <div class="muted" style="font-size:13px;margin-top:4px">📞 ${esc(b.phone)} · ✉️ ${esc(b.email)}<br>Requested ${b.createdAt ? new Date(b.createdAt).toLocaleString('en-GB') : ''} · Code <span style="font-family:monospace">${b.id}</span></div>
+        <div class="muted" style="font-size:13px;margin-top:4px">📞 ${esc(b.phone)} · ✉️ ${esc(b.email)} · Fee: ${b.price > 0 ? rs(b.price) : 'not set'}<br>Requested ${b.createdAt ? new Date(b.createdAt).toLocaleString('en-GB') : ''} · Code <span style="font-family:monospace">${b.id}</span></div>
         ${b.notes ? `<div style="margin-top:6px;font-size:13.5px">💬 ${esc(b.notes)}</div>` : ''}
         ${b.approvedNote ? `<div class="help" style="margin-top:6px;white-space:pre-wrap">Note sent: ${esc(b.approvedNote)}</div>` : ''}
         ${b.rejectReason ? `<div class="help" style="margin-top:6px">Reason: ${esc(b.rejectReason)}</div>` : ''}
