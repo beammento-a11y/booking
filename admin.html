@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 
- <!-- Open Graph Preview --> <meta property="og:type" content="website"> <meta property="og:site_name" content="MentoBeam"> <meta property="og:title" content="MentoBeam - Exams, Venue Hire & Training Spaces"> <meta property="og:description" content="Find your perfect venue and book online with MentoBeam."> <meta property="og:url" content="https://beammento-a11y.github.io/booking/"> <!-- Cloudinary Hosted Preview Image --> <meta property="og:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01"> <meta property="og:image:secure_url" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01"> <!-- Twitter / X Preview --> <meta name="twitter:card" content="summary_large_image"> <meta name="twitter:title" content="MentoBeam - Exams, Venue Hire & Training Spaces"> <meta name="twitter:description" content="Find your perfect venue and book online with MentoBeam."> <meta name="twitter:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01">
+!-- Open Graph Preview --> <meta property="og:type" content="website"> <meta property="og:site_name" content="MentoBeam"> <meta property="og:title" content="MentoBeam - Exams, Venue Hire & Training Spaces"> <meta property="og:description" content="Find your perfect venue and book online with MentoBeam."> <meta property="og:url" content="https://beammento-a11y.github.io/booking/"> <!-- Cloudinary Hosted Preview Image --> <meta property="og:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01"> <meta property="og:image:secure_url" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01"> <!-- Twitter / X Preview --> <meta name="twitter:card" content="summary_large_image"> <meta name="twitter:title" content="MentoBeam - Exams, Venue Hire & Training Spaces"> <meta name="twitter:description" content="Find your perfect venue and book online with MentoBeam."> <meta name="twitter:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01">
+ 
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="robots" content="noindex,nofollow"/>
@@ -698,9 +699,10 @@ views.registrations = {
     const opts = '<option value="">All dates</option>' + dates.slice().sort((a, b) => b.date.localeCompare(a.date)).map(d => `<option value="${d.id}" ${regF.date === d.id ? 'selected' : ''}>${fmtDate(d.date, true)} – ${esc(d.title || '')}</option>`).join('');
     if (sel.innerHTML !== opts) sel.innerHTML = opts;
     const list = regFiltered(), shown = list.slice(0, regF.limit);
-    $('#rgList').innerHTML = list.length ? `<p class="help" style="margin-bottom:10px">${list.length} registration${list.length === 1 ? '' : 's'}</p><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Exam</th><th>Attendance</th><th></th></tr></thead><tbody>
+    $('#rgList').innerHTML = list.length ? `<p class="help" style="margin-bottom:10px">${list.length} registration${list.length === 1 ? '' : 's'}</p><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Exam</th><th>Fee</th><th>Attendance</th><th></th></tr></thead><tbody>
       ${shown.map(b => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td>
-        <td style="white-space:nowrap">${fmtDate(b.date, true)}<br><small class="muted">${slotLabel(b)}</small></td><td>${attBadge(b.attended)}</td>
+        <td style="white-space:nowrap">${fmtDate(b.date, true)}<br><small class="muted">${slotLabel(b)}</small></td>
+        <td>${b.price > 0 ? rs(b.price) : '<span class="muted">No price</span>'}</td><td>${attBadge(b.attended)}</td>
         <td><div class="acts"><button class="btn btn-ghost btn-sm" data-act="regEdit" data-id="${b.id}">Edit</button><button class="btn btn-danger btn-sm" data-act="regDel" data-id="${b.id}">Delete</button></div></td></tr>`).join('')}
       </tbody></table></div>${list.length > shown.length ? `<div style="text-align:center;margin-top:14px"><button class="btn btn-ghost" data-act="regMore">Show more</button></div>` : ''}`
       : '<div class="empty">No registrations found.</div>';
@@ -733,7 +735,7 @@ views.attendance = {
       return `<div class="card box"><div class="sbh" style="border-radius:10px;margin-bottom:10px"><b>⏰ ${slotLabel(s)}</b>
         <span>✅ ${p} present · ❌ ${a} absent · ⏳ ${all.length - p - a} not marked · ${all.length} total</span></div>
         ${all.length ? `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" data-act="attAll" data-slot="${s.id}" data-val="1">Mark all present</button><button class="btn btn-ghost btn-sm" data-act="attAll" data-slot="${s.id}" data-val="0">Clear all</button></div>` : ''}
-        ${regs.length ? `<div class="tw"><table><tbody>${regs.map(b => `<tr><td><b>${esc(b.name)}</b><br><small class="muted">${esc(b.email)} · ${esc(b.phone)}</small></td>
+        ${regs.length ? `<div class="tw"><table><tbody>${regs.map(b => `<tr><td><b>${esc(b.name)}</b><br><small class="muted">${esc(b.email)} · ${esc(b.phone)} · Fee: ${b.price > 0 ? rs(b.price) : 'not set'}</small></td>
           <td style="width:1%"><div class="att-btns"><button class="ab p ${b.attended === true ? 'on' : ''}" data-act="att" data-id="${b.id}" data-val="p">Present</button>
           <button class="ab a ${b.attended === false ? 'on' : ''}" data-act="att" data-id="${b.id}" data-val="a">Absent</button></div></td></tr>`).join('')}</tbody></table></div>`
           : `<p class="muted" style="font-size:13px">${all.length ? 'No match.' : 'No registrations for this slot.'}</p>`}</div>`;
