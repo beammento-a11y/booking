@@ -95,13 +95,20 @@ function incEntries() {
     if (b.balanceVerified && b.balanceReceived > 0 && b.balanceReceivedAt) e.push({ t: b.balanceReceivedAt, type: 'Balance', amt: b.balanceReceived, b });
     if (b.refundStatus === 'paid' && b.refundPaidAmount > 0 && b.refundPaidAt) e.push({ t: b.refundPaidAt, type: 'Refund', amt: -b.refundPaidAmount, b });
   });
-  // PTE Simulation Exam fee – counted once the student is marked Present (that's when the fee is normally collected)
+  // PTE Simulation Exam fee – counted once the student is marked Present (that's when the fee is normally collected).
+  // Uses the price saved on the booking itself; if that is missing/0 (an older booking, made before a price was set) it
+  // falls back to the price currently configured in Website Content, so marking a student Present always counts the fee.
+  const examPriceNow = Number((typeof siteData !== 'undefined' && siteData && siteData.examPrice) || 0);
   (typeof bookings !== 'undefined' ? bookings : []).forEach(b => {
-    if (b.attended === true && b.price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Exam', amt: b.price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'PTE Simulation Exam', packageName: b.examTitle || 'PTE Simulation Exam', date: b.date } });
+    const price = b.price > 0 ? b.price : examPriceNow;
+    if (b.attended === true && price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Exam', amt: price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'PTE Simulation Exam', packageName: b.examTitle || 'PTE Simulation Exam', date: b.date } });
   });
-  // Mock test fee – counted once the student is marked Present (same rule as the simulation exam)
+  // Mock test fee – counted once the student is marked Present (same rule as the simulation exam), with the same fallback
+  // to the price currently configured in Mock Tests → Instructions, terms & WhatsApp.
+  const mockPriceNow = Number((typeof mkCfg !== 'undefined' && mkCfg && mkCfg.price) || 0);
   (typeof mkBookings !== 'undefined' ? mkBookings : []).forEach(b => {
-    if (b.attended === true && b.price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Mock Test', amt: b.price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'Mock Test', packageName: 'Mock Test', date: b.date } });
+    const price = b.price > 0 ? b.price : mockPriceNow;
+    if (b.attended === true && price > 0 && b.attendedAt) e.push({ t: b.attendedAt, type: 'Mock Test', amt: price, b: { id: b.id, name: b.name, phone: b.phone, spaceName: 'Mock Test', packageName: 'Mock Test', date: b.date } });
   });
   return e.sort((a, b) => b.t - a.t);
 }
