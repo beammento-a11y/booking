@@ -1,30 +1,6 @@
 <!doctype html>
 <html lang="en">
 <head>
-   <!-- Open Graph Preview -->
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="MentoBeam">
-
-    <meta property="og:title" content="MentoBeam - Exams, Venue Hire & Training Spaces">
-
-    <meta property="og:description" content="Find your perfect venue and book online with MentoBeam.">
-
-    <meta property="og:url" content="https://beammento-a11y.github.io/booking/">
-
-    <!-- Cloudinary Hosted Preview Image -->
-    <meta property="og:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01">
-
-    <meta property="og:image:secure_url" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01">
-
-    <!-- Twitter / X Preview -->
-    <meta name="twitter:card" content="summary_large_image">
-
-    <meta name="twitter:title" content="MentoBeam - Exams, Venue Hire & Training Spaces">
-
-    <meta name="twitter:description" content="Find your perfect venue and book online with MentoBeam.">
-
-    <meta name="twitter:image" content="https://res.cloudinary.com/kkgqtlai/image/upload/f_auto,q_auto/file_000000006a6c8211ba5674dfe1b61b01">
-
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <link rel="icon" type="image/png" href="icon.png"/>
@@ -408,10 +384,10 @@ async function submitReg() {
   const s = slots.find(x => x.id === selSlot);
   if (!s) { err.textContent = 'This slot is no longer available.'; return; }
   const d = dates.find(x => x.id === s.dateId);
-  if (Object.values(myDocs).some(b => b.slotId === s.id)) { err.textContent = 'You already booked this time slot on this device.'; return; }
+  if (Object.values(myDocs).some(b => b && b.slotId === s.id)) { err.textContent = 'You already booked this time slot on this device.'; return; }
   const btn = m.$('#regBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Booking...';
   const bref = db.collection('bookings').doc();
-  const data = { slotId: s.id, dateId: s.dateId, date: s.date, time: s.time, endTime: s.endTime || null, examTitle: (d && d.title) || 'PTE Simulation Exam', name, email, phone, createdAt: Date.now(), attended: null };
+  const data = { slotId: s.id, dateId: s.dateId, date: s.date, time: s.time, endTime: s.endTime || null, examTitle: (d && d.title) || 'PTE Simulation Exam', name, email, phone, createdAt: Date.now(), attended: null, price: Number(site.examPrice) > 0 ? Number(site.examPrice) : 0 };
   try {
     await db.runTransaction(async tx => {
       const sref = db.collection('slots').doc(s.id);
@@ -445,7 +421,7 @@ async function submitReg() {
 async function loadMy() {
   const miss = myIds.filter(id => !(id in myDocs));
   await Promise.all(miss.map(async id => {
-    try { const s = await db.collection('bookings').doc(id).get(); myDocs[id] = s.exists ? { id, ...s.data() } : null; } catch (e) { myDocs[id] = undefined; }
+    try { const s = await db.collection('bookings').doc(id).get(); myDocs[id] = s.exists ? { id, ...s.data() } : null; } catch (e) { /* network hiccup – leave it unset so it's retried next time, not stuck as undefined */ }
   }));
   renderMy();
 }
@@ -619,8 +595,9 @@ async function submitMock() {
   if (Object.values(mockDocs).some(b => b && ['pending', 'approved'].includes(b.status) && (isFree ? (!b.slotId && b.date === mockDate && b.time === ft) : b.slotId === s.id))) { err.textContent = 'You already requested this time slot on this device.'; return; }
   const btn = m.$('#mkBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sending...';
   const dur = isFree ? mockDur() : (Math.max(15, mkMin(s.endTime) - mkMin(s.time)) || 60);
-  const data = isFree ? { name, email, phone, date: mockDate, time: ft, endTime: addMinutes(ft, dur), duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() }
-    : { slotId: s.id, name, email, phone, date: s.date, time: s.time, endTime: s.endTime, duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now() };
+  const mkPrice = Number(mock.price) > 0 ? Number(mock.price) : 0;
+  const data = isFree ? { name, email, phone, date: mockDate, time: ft, endTime: addMinutes(ft, dur), duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now(), price: mkPrice }
+    : { slotId: s.id, name, email, phone, date: s.date, time: s.time, endTime: s.endTime, duration: dur, notes: note.slice(0, 300), status: 'pending', createdAt: Date.now(), price: mkPrice };
   const bref = db.collection('mockBookings').doc();
   try {
     if (isFree) await bref.set(data);                                       // no admin time slot for this date: a plain request for one of the available times (the admin approves it)
